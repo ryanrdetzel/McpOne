@@ -4,6 +4,27 @@
 !.env.example
 node_modules/
 graft/.cache/
+dist/
+build/
+.react-router/
+.vite/
+.turbo/
+coverage/
+*.tsbuildinfo
+*.log
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+
+# Local reference source.
+/blueprint/
+
+# Cloudflare local state and private binding files.
+.wrangler/
+.state/
+/.omp/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+*.secrets.json
+/packages/database/generated/

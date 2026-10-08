@@ -1,0 +1,24 @@
+{
+  "name": "@scaffold/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --ip 127.0.0.1 --port 3000",
+    "typecheck": "tsc --noEmit",
+    "build": "node ../../scripts/build-worker.mjs",
+    "db:migrate": "wrangler d1 migrations apply DB --local",
+    "smoke": "vitest run"
+  },
+  "dependencies": {
+    "@scaffold/config": "workspace:*",
+    "@scaffold/core": "workspace:*",
+    "@scaffold/database": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261008.1",
+    "@scaffold/schema": "workspace:*",
+    "typescript": "5.9.3",
+    "zod": "4.4.3"
+  }
+}

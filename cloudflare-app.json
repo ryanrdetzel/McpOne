@@ -1,0 +1,28 @@
+{
+  "entrypoint": "apps/worker/dist/index.js",
+  "compatibilityDate": "2026-10-02",
+  "compatibilityFlags": ["nodejs_compat"],
+  "database": true,
+  "migrationsDir": "packages/database/migrations",
+  "assetsDir": "apps/web/build/client",
+  "assetConfig": {
+    "html_handling": "none",
+    "not_found_handling": "none",
+    "run_worker_first": true
+  },
+  "healthPath": "/healthz",
+  "vars": {
+    "NODE_ENV": "production",
+    "APP_SLUG": "mcpone",
+    "RELEASE": "workers-d1-1",
+    "BETTER_AUTH_URL": "https://cfl-mcpone-3e4b5c9dc0.ryandetzel3409.workers.dev",
+    "TRUSTED_ORIGINS": "https://cfl-mcpone-3e4b5c9dc0.ryandetzel3409.workers.dev"
+  },
+  "previewVars": {
+    "NODE_ENV": "production",
+    "APP_SLUG": "mcpone",
+    "RELEASE": "preview"
+  },
+  "secretsFile": "production.secrets.json",
+  "previewSecretsFile": "preview.secrets.json"
+}

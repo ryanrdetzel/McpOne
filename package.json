@@ -1,0 +1,31 @@
+{
+  "name": "mcpone",
+  "private": true,
+  "packageManager": "pnpm@11.20.0",
+  "engines": {
+    "node": ">=22.18 <23"
+  },
+  "scripts": {
+    "setup": "node scripts/setup-local.mjs",
+    "dev": "pnpm --filter @scaffold/web build && pnpm db:migrate && pnpm --filter @scaffold/worker dev",
+    "start": "pnpm dev",
+    "db:migrate": "pnpm --filter @scaffold/worker db:migrate",
+    "db:generate": "pnpm --filter @scaffold/database db:generate",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "typecheck": "pnpm -r typecheck",
+    "build": "pnpm -r build",
+    "lint": "biome check .",
+    "test": "pnpm --filter @scaffold/config unit && pnpm --filter @scaffold/database unit && pnpm --filter @scaffold/core unit",
+    "smoke": "pnpm --filter @scaffold/worker smoke",
+    "cf:secrets": "node scripts/create-secrets.mjs",
+    "cf:check": "pnpm build && node scripts/cloudflare-upload.mjs --check",
+    "cf:upload": "pnpm build && node scripts/cloudflare-upload.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.7",
+    "typescript": "5.9.3",
+    "esbuild": "0.28.2",
+    "wrangler": "4.148.0",
+    "vitest": "4.1.10"
+  }
+}

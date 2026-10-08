@@ -1,0 +1,27 @@
+{
+  "name": "@scaffold/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "unit": "vitest run"
+  },
+  "dependencies": {
+    "@hono/zod-openapi": "1.5.1",
+    "@scaffold/config": "workspace:*",
+    "@scaffold/database": "workspace:*",
+    "@scaffold/schema": "workspace:*",
+    "better-auth": "1.6.26",
+    "drizzle-orm": "0.45.2",
+    "hono": "4.13.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

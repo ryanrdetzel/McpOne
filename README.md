@@ -1,12 +1,12 @@
 # McpOne
 
-Tool Control Plane dashboard running on Cloudflare Workers + D1: React Router SPA, Hono RPC/OpenAPI, Drizzle, Better Auth, and organization-scoped authorization. The API and frontend share one origin. Internal workspace names remain `@scaffold/*`.
+Tool Control Plane with a shared Hono execution core on Cloudflare Workers/D1 and direct Node/SQLite, a React Router status dashboard, Drizzle, Better Auth, and organization-scoped authorization. M1 provides a deterministic fixture Tool, stable Profiles, labeled Grants, Allow/Ask/Block, owner approvals, durable Runs, and safe duplicate/restart handling. Internal workspace names remain `@scaffold/*`.
 
 ## Architecture
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the canonical system blueprint, package boundaries, invariants, and architecture decision process. Validate proposed changes against it; deviations or design conflicts require human approval before implementation. This README covers setup, validation, and deployment operations.
 
-The Node listener, PostgreSQL startup migrations, Docker image, Compose setup, and DeployMill configuration are superseded. Existing local `.env` files and PostgreSQL data are not deleted or imported into D1. Wrangler configuration is for **local development**; `cloudflare-app.json` is the production lifecycle configuration.
+The old PostgreSQL listener, startup migrations, Docker image, Compose setup, and DeployMill configuration are superseded. The approved direct Node adapter uses SQLite and the same application core as Workers; it is not the old PostgreSQL server. Existing `.env` files and PostgreSQL data are not imported. Wrangler configuration is for **local development**; `cloudflare-app.json` remains the production lifecycle configuration.
 
 ## Local startup
 
@@ -46,6 +46,22 @@ pnpm db:generate   # generate SQL candidates; never applies/deploys migrations
 ```
 
 Wrangler persists local D1 under ignored `apps/worker/.wrangler/`. `/healthz` verifies every current table and column; a reachable but unmigrated/stale database returns 503. `/db` and `/api/dashboard` use the same readiness check. `/openapi.json` describes registered API routes. Real API/auth routes are never replaced by SPA HTML; hashed assets are immutable and HTML is uncached.
+
+### Direct Node/SQLite
+
+After installing the supported Node/pnpm versions and dependencies:
+
+```sh
+pnpm check
+PORT=3030 BETTER_AUTH_URL=http://localhost:3030 TRUSTED_ORIGINS=http://localhost:3030 pnpm local
+```
+
+`local` builds the SPA, applies the same ordered committed migrations, then listens on loopback at **http://localhost:3030**. SQLite persists in ignored `.state/local/mcpone.sqlite`; `SQLITE_PATH` selects another disposable database. No Docker, Cloudflare login, or private production bindings are needed. Public development bindings are intentionally insecure outside local development; production validation still rejects default/short secrets.
+
+The listener does not watch source. Stop and restart it after server edits, retaining the same SQLite path and secret when proving recovery. It drains durable work at startup and on a recurring timer. Workers use the same drain from a persistent SQLite-backed `CONTROL_SCHEDULER` Durable Object alarm: the first fetch acknowledges durable arming, then native alarms rearm every 60 seconds without constructing the HTTP application. Only platform alarm metadata lives in that object; authoritative Run/job state stays in D1. Do not confuse caller polling or an explicit `/drain` request with autonomous recovery. The interval is nominal, not a Cloudflare latency guarantee.
+
+Use `PORT`, `BETTER_AUTH_URL`, and `TRUSTED_ORIGINS` with the same exact localhost origin if changing ports. Optional private bindings load from `LOCAL_CONFIG=/path/to/local.secrets.json` (ignored, mode `0600`); process environment overrides those bindings. Keep real credentials out of shell arguments and logs; `.env` is not implicitly loaded.
+
 
 ### Agent validation workflow
 
@@ -117,8 +133,81 @@ Verified provider existence and live health, uncached `/healthz` with the final 
 
 The lifecycle controller storage upgrade is deployed with its original namespace, installation, credentials, and legacy operation identities preserved. Snapshots now use chunked SQL storage and journal references under the 24 MiB hosted limit; the retained local repair publisher was released before remote application deployment.
 
+## M1 workflow and conformance
+
+See [the frozen M1 contract](docs/M1-CONTRACT.md) for wire, policy, approval, deduplication, and uncertainty semantics. M1 supports stateless JSON Streamable HTTP at `/mcp/:profileId`, protocol `2025-06-18`; string correlation IDs are 1–128 characters. Request metadata uses `_meta["com.toolcontrolplane/execution"]`; transport IDs are not idempotency keys. `runs.get` retrieves the original stored Run without dispatching. A Profile URL is stable and public; its separately labeled bearer Grant is the credential.
+
+**Observed M1 acceptance:** the identical full SQLite and isolated hosted suite passed, including autonomous native alarms, actual restart/redeploy and real 15-minute expiry. See [redacted M1 evidence](docs/M1-EVIDENCE.md) for runtime/client versions, gates, operation/namespace identities, commands, warnings and limits. This is not a production release or required-client launch certification.
+
+### Deterministic owner demo
+
+Run against a disposable local or isolated hosted database only:
+
+```sh
+export M1_BASE_URL=http://localhost:3030
+export M1_ALLOW_MUTATION=yes
+pnpm m1:demo setup
+pnpm m1:demo policy allow
+pnpm m1:demo call 7
+pnpm m1:demo policy block
+pnpm m1:demo call 11
+pnpm m1:demo policy ask
+pnpm m1:demo call 19
+# Use the public run_id returned by the Ask call:
+pnpm m1:demo approve <run-id>
+pnpm m1:demo run <run-id>
+pnpm m1:demo call 23
+pnpm m1:demo deny <second-run-id>
+pnpm m1:demo revoke
+```
+
+Allow records one effect; Block and owner denial record none. Ask returns `pending_approval` and a same-origin authenticated inspection URL. Approval can return `queued`; retrieve the Run to observe completion rather than calling the business Tool again. The same stable Profile remains configured throughout. After revocation, that Grant cannot invoke or retrieve.
+
+The demo creates a synthetic Better Auth owner/workspace and stores only its session, Grant, and public IDs in ignored `.state/m1-demo.json`, mode `0600`; it never prints passwords, cookies, or bearer tokens. `M1_DEMO_STATE_FILE` selects a separate ignored handoff for another runtime/demo. Do not overwrite an existing handoff. An optional `M1_DEMO_NOTE` is protected replay input and is never printed or retained by the client. Setup and approvals use this CLI/authenticated control API, not a rich owner portal. Owner REST timestamps are UTC ISO 8601 strings; grant `expiresAt: null` is an explicit non-expiring choice, while omission defaults to 90 days.
+
+### Same black-box suite, actual restart, real expiry
+
+```sh
+export M1_BASE_URL=http://localhost:3030
+export M1_ALLOW_MUTATION=yes
+export M1_STATE_FILE=.state/m1-conformance/node.json
+pnpm m1:conformance --phase=prepare
+```
+
+Prepare deliberately exits **2 / pending**, not success: it leaves an approved paused queue, a real running claim, and two frozen 15-minute approval deadlines in a separate expiry workspace. Stop the producing process promptly, **before the fresh running claim's 60-second lease expires**, then restart against the same SQLite/secret. Finish builds and arrange the restart command before prepare; leaving the old runtime alive past the lease invalidates the post-claim restart evidence:
+
+```sh
+PORT=3030 BETTER_AUTH_URL=http://localhost:3030 TRUSTED_ORIGINS=http://localhost:3030 pnpm --filter @scaffold/local start
+# In a second terminal, only after observing the actual restart:
+M1_RESTART_CONFIRMED=yes M1_EXPIRY_WAIT=yes pnpm m1:conformance --phase=resume
+```
+
+Resume uses a zero-HTTP interval (default 70 seconds), proves scheduler-driven queue completion and conservative post-claim uncertainty, then waits for the **real** 15-minute deadlines. Do not run another client/demo/browser against that application during the zero-HTTP interval: another invocation or approval can drain work and invalidate autonomous evidence. Exit **0 / pass** requires every gate, including both actual-restart paths and both expiry cases. The private mode-0600 handoff is removed on complete success. Suite-only mode cannot certify actual restart; simulation, pending gates, shortened deadlines, manual drains, and a successful build are not substitutes.
+
+### Isolated hosted proof
+
+Hosted proof requires the built private lifecycle checkout/client described above; local setup does not. Do not change production bindings or test against the production URL.
+
+```sh
+pnpm check
+CFL_CLIENT_HOME=/path/to/cloudflare-lifecycle-mcp pnpm cf:check
+export CFL_CLIENT_HOME=/path/to/cloudflare-lifecycle-mcp
+export CFL_REMOTE_CONFIG="$CFL_CLIENT_HOME/.state/hosted/client.json"
+export M1_ALLOW_MUTATION=yes
+pnpm m1:hosted provision
+```
+
+Provisioning creates/reuses the dedicated disposable **`mcpone-m1-proof`** application, with its own empty D1 and fresh private secret. It uploads the normal Worker/SPA/migrations and binds the exact returned origin; it never edits the production manifest. State/secrets remain in ignored mode-0600 files. Redeploy performs live identity/database isolation checks before upload; a cached target name alone is insufficient.
+
+Native version previews cannot independently isolate Durable Object state, so this approved proof uses a separate lifecycle-managed Worker. The normal manifest declares `CONTROL_SCHEDULER` / `ControlScheduler`; no Cron installation or manual scheduler endpoint is required. If reusing an established pre-alarm proof app, run `pnpm m1:hosted migrate` once: it explicitly adds only that binding, preserving the existing Worker, D1 and data, and rejects any other live layout. The lifecycle controller must expose the approved additive `durableObjectMigration` deploy input. Ordinary `redeploy` does not bypass the layout guard. Do not enable a new paid service/tier for validation.
+
+Set `M1_BASE_URL` to the returned isolated origin and `M1_STATE_FILE=.state/m1-conformance/hosted.json`; run `SMOKE_BASE_URL="$M1_BASE_URL" pnpm smoke`, then the same prepare command. Let the auth rate-limit window elapse between the smoke's synthetic sign-ups and conformance setup; an immediate combined run can legitimately return 429. Immediately use `pnpm m1:hosted redeploy` for the actual restart boundary, within the fresh claim's 60-second lease; record its new ready operation/version and unchanged scheduler namespace/D1. Run the identical resume command and require all gates. `pnpm m1:hosted status` is read-only but performs a health fetch: do not run it during zero-HTTP proof. Use `pnpm m1:hosted delete` only for this owned disposable app; never delete unrelated applications. Retain only redacted evidence, not credentials/database dumps.
+
+Successful proof deletion clears the cached target identity and removes its isolated secret file. Provisioning trusts the controller's live owned-app list, not a deleted cached ID; the next `provision` starts a fresh isolated application/database/secret.
+
+
 ## Conventions and product scope
 
-Preserve the pnpm workspace, Zod contracts, Hono RPC/OpenAPI, organization-scoped authorization, structured request/error logs, echoed request IDs, bodyless HEAD responses, and one-origin SPA routing. Keep platform-only code in `apps/worker`; new domain behavior belongs in shared libraries. Production rejects missing/default/short auth secrets and absent/mismatched trusted origins.
+Preserve the pnpm workspace, Zod contracts, Hono RPC/OpenAPI, organization-scoped authorization, structured request/error logs, echoed request IDs, bodyless HEAD responses, and one-origin SPA routing. Keep platform-only code in `apps/worker` or `apps/local`; domain behavior belongs in shared libraries. Production rejects missing/default/short auth secrets and absent/mismatched trusted origins.
 
-The supplied Notion PRD required sign-in and was not accessible during scaffolding. This remains a dashboard shell with real infrastructure, not invented product workflows. Obtain accessible requirements before adding product integrations, permissions, or models beyond the existing scaffold.
+The approved M1 brief/PRD now supply product requirements. The public dashboard reports infrastructure health without exposing private workspace data; the owner CLI/API demonstrates M1 execution. External integrations/Accounts, Tool authoring/imports, rich owner UI/notifications, export/restore/full configurable retention, native MCP Tasks, and required-client launch certification are not claimed by this milestone.

@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import type { D1Database } from "@cloudflare/workers-types";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { expect, it } from "vitest";
@@ -21,17 +21,16 @@ it("rejects unmigrated and missing-column D1 schemas, but accepts the committed 
     )) as unknown as D1Database;
     const db = createDatabase(binding);
     await expect(checkDatabase(db)).rejects.toThrow();
-    const migration = await readFile(
-      new URL("../migrations/0000_initial.sql", import.meta.url),
-      "utf8",
-    );
-    await binding.batch(
-      migration
-        .split(";")
-        .map((query) => query.trim())
-        .filter(Boolean)
-        .map((query) => binding.prepare(query)),
-    );
+    const directory = new URL("../migrations/", import.meta.url);
+    for (const name of (await readdir(directory))
+      .filter((name) => name.endsWith(".sql"))
+      .sort()) {
+      const migration = await readFile(new URL(name, directory), "utf8");
+      // D1 exec separates physical lines; retain complete trigger bodies on one line.
+      await binding.exec(
+        migration.replace(/^--.*$/gm, "").replaceAll("\n", " "),
+      );
+    }
     await checkDatabase(db);
     await binding
       .prepare("ALTER TABLE sessions DROP COLUMN active_organization_id")

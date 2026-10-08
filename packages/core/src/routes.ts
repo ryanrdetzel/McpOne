@@ -9,6 +9,8 @@ import {
   tables,
 } from "@scaffold/schema";
 import type { Context } from "hono";
+import { ControlRoutes } from "./control-routes";
+import type { createExecutionService } from "./execution/service";
 import type { FlagService } from "./flags";
 import type { OrgRoleResult } from "./guard";
 
@@ -16,6 +18,7 @@ export interface RouteDependencies {
   env: Env;
   db: Database;
   flags: FlagService;
+  execution?: ReturnType<typeof createExecutionService>;
   requireOrgRole(c: Context, roles: readonly string[]): Promise<OrgRoleResult>;
 }
 
@@ -23,7 +26,13 @@ export interface RouteDependencies {
 export class ApiRoutes {
   readonly api;
 
-  constructor({ env, db, flags, requireOrgRole }: RouteDependencies) {
+  constructor({
+    env,
+    db,
+    flags,
+    requireOrgRole,
+    execution,
+  }: RouteDependencies) {
     this.api = new OpenAPIHono()
       .openapi(
         createRoute({
@@ -134,6 +143,12 @@ export class ApiRoutes {
           return c.json(input, 200);
         },
       );
+    if (execution) {
+      this.api.route(
+        "/api/control",
+        new ControlRoutes({ service: execution, env, requireOrgRole }).api,
+      );
+    }
 
     this.api.doc("/openapi.json", {
       openapi: "3.1.0",

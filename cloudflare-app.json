@@ -11,6 +11,9 @@
     "run_worker_first": true
   },
   "healthPath": "/healthz",
+  "durableObjects": [
+    { "name": "CONTROL_SCHEDULER", "className": "ControlScheduler" }
+  ],
   "vars": {
     "NODE_ENV": "production",
     "APP_SLUG": "mcpone",

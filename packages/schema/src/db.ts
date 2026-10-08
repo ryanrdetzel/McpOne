@@ -15,3 +15,4 @@ export const featureFlags = sqliteTable("feature_flags", {
 });
 
 export * from "./auth";
+export * from "./control";

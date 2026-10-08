@@ -17,7 +17,7 @@ const env: Env = {
   APP_SLUG: "mcpone",
   RELEASE: "unit-release",
   BETTER_AUTH_URL: "http://localhost:8787",
-  BETTER_AUTH_SECRET: "not-to-be-logged",
+  BETTER_AUTH_SECRET: "public-test-secret-not-to-be-logged",
   TRUSTED_ORIGINS: ["http://localhost:8787"],
 };
 

@@ -3,6 +3,6 @@
   "include": ["src"],
   "compilerOptions": {
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "types": []
+    "types": ["@cloudflare/workers-types"]
   }
 }

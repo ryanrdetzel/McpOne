@@ -59,7 +59,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <div className="workspace">
           <span className="workspace-icon">M</span>
           <div>
-            McpOne workspace<small>Cloudflare Workers + D1</small>
+            McpOne workspace<small>Workers/D1 · Node/SQLite</small>
           </div>
         </div>
         <p className="nav-label">WORKSPACE</p>
@@ -80,7 +80,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </nav>
         <div className="sidebar-footer">
           <span className="status-dot" />
-          Workers + D1<small>Single-origin service</small>
+          Shared execution core<small>Single-origin service</small>
         </div>
       </aside>
 
@@ -91,7 +91,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <ChevronRight size={14} />
             <span className="text-foreground">Overview</span>
           </div>
-          <span className="environment-label">WORKERS · D1</span>
+          <span className="environment-label">M1 · EXECUTION</span>
         </header>
         <main id="overview" className="dashboard-main">
           <div className="page-heading">
@@ -148,7 +148,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                   <span
                     className={`status-dot ${status?.database ? "" : "offline"}`}
                   />
-                  D1 · Drizzle migrations
+                  SQLite · Drizzle migrations
                 </p>
               </CardContent>
             </Card>
@@ -172,11 +172,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <h2>Workspace foundation</h2>
-                  <span className="tag">SCAFFOLD</span>
+                  <h2>Core execution</h2>
+                  <span className="tag">M1</span>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  The stack is ready. Product configuration comes next.
+                  Stable Profiles, governed calls, and durable Runs.
                 </p>
               </CardHeader>
               <CardContent>
@@ -184,11 +184,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                   <span className="empty-icon">
                     <Blocks size={30} />
                   </span>
-                  <h3>Start with a clean control plane</h3>
+                  <h3>Connect once. Govern each execution.</h3>
                   <p>
-                    No tool catalog or integrations have been configured. This
-                    dashboard shows live infrastructure status, not sample
-                    product data.
+                    The fixture workflow supports labeled Grants,
+                    Allow/Ask/Block, owner approval, and Run retrieval without
+                    replaying effects. Use the documented CLI to configure and
+                    inspect your workspace.
                   </p>
                   <Button asChild variant="outline">
                     <a href="/openapi.json" target="_blank" rel="noreferrer">
@@ -201,11 +202,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 <div className="scope-note">
                   <BookOpen size={18} />
                   <p>
-                    <strong>PRD access needed</strong>
+                    <strong>Minimal owner interface</strong>
                     <br />
-                    The linked Notion PRD requires sign-in. Product screens and
-                    workflows are not implemented yet; their requirements need
-                    to be available before this can match the PRD.
+                    Setup and approvals use the CLI and authenticated control
+                    API. This public dashboard reports live infrastructure
+                    health, not private Profiles or Runs. Rich product screens
+                    come later.
                   </p>
                 </div>
               </CardContent>
@@ -213,7 +215,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
             <Card>
               <CardHeader>
-                <h2>Cloudflare-native stack</h2>
+                <h2>Shared-core stack</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
                   One service. One origin. Shared contracts.
                 </p>
@@ -223,8 +225,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                   {[
                     ["Frontend", "React Router 7 · React · Vite"],
                     ["Components", "Tailwind CSS · shadcn/ui primitives"],
-                    ["Backend", "Workers · Hono · RPC · OpenAPI"],
-                    ["Data", "D1 · Drizzle · Zod"],
+                    ["Backend", "Workers/Node · Hono · RPC · OpenAPI"],
+                    ["Data", "D1/SQLite · Drizzle · Zod"],
                     ["Authentication", "Better Auth · organizations"],
                     ["Tooling", "pnpm · TypeScript · Biome · Vitest"],
                   ].map(([name, detail]) => (
@@ -290,8 +292,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                   {[
                     ["apps/web", "Dashboard & UI"],
                     ["apps/worker", "Cloudflare bindings & assets"],
+                    ["apps/local", "Node delivery & recovery scheduling"],
                     ["packages/core", "API, auth & authorization"],
-                    ["packages/database", "D1 access & migrations"],
+                    ["packages/database", "D1/SQLite access & migrations"],
                     ["packages/schema", "Shared contracts & tables"],
                     ["packages/config", "Validated environment"],
                   ].map(([directory, purpose]) => (

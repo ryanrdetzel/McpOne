@@ -1,29 +1,15 @@
-import type { D1Database } from "@cloudflare/workers-types";
-import { parseEnv } from "@scaffold/config";
-import { type Application, createApplication } from "@scaffold/core";
-import { createDatabase } from "@scaffold/database";
+import { createApplication } from "@scaffold/core";
+import { type Bindings, runtime } from "./runtime";
 
-/** Only the standard fetch surface is used; core retains portable Web API types. */
-interface AssetBinding {
-  fetch(request: Request): Promise<Response>;
-}
+export { ControlScheduler } from "./control-scheduler";
 
-interface Bindings extends Record<string, unknown> {
-  DB: D1Database;
-  ASSETS: AssetBinding;
-}
-
-const applications = new WeakMap<Bindings, Application>();
 const servicePath =
-  /^(?:\/api(?:\/|$)|\/admin(?:\/|$)|\/healthz(?:\/|$)|\/db(?:\/|$)|\/openapi\.json(?:\/|$))/;
+  /^(?:\/api(?:\/|$)|\/admin(?:\/|$)|\/mcp(?:\/|$)|\/healthz(?:\/|$)|\/db(?:\/|$)|\/openapi\.json(?:\/|$))/;
 
 function application(bindings: Bindings) {
-  let app = applications.get(bindings);
-  if (app) return app;
-  app = createApplication({
-    env: parseEnv(bindings),
-    db: createDatabase(bindings.DB),
-  });
+  const context = runtime(bindings);
+  if (context.app) return context.app;
+  const app = createApplication(context);
   app.notFound(async (c) => {
     const request = c.req.raw;
     const url = new URL(request.url);
@@ -53,12 +39,15 @@ function application(bindings: Bindings) {
       headers,
     });
   });
-  applications.set(bindings, app);
+  context.app = app;
   return app;
 }
 
 export default {
-  fetch(request: Request, bindings: Bindings) {
+  async fetch(request: Request, bindings: Bindings) {
+    const namespace = bindings.CONTROL_SCHEDULER;
+    const scheduler = namespace.get(namespace.idFromName("execution-loop"));
+    await scheduler.ensureScheduled();
     return application(bindings).fetch(request);
   },
 };

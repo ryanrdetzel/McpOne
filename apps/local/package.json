@@ -1,0 +1,29 @@
+{
+  "name": "@scaffold/local",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18 <23"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx src/index.ts",
+    "db:migrate": "tsx src/migrate.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "true",
+    "unit": "vitest run test"
+  },
+  "dependencies": {
+    "@scaffold/config": "workspace:*",
+    "@scaffold/core": "workspace:*",
+    "@scaffold/database": "workspace:*",
+    "@scaffold/schema": "workspace:*",
+    "tsx": "4.23.5"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.2",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

@@ -18,6 +18,7 @@ const env: Env = {
   RELEASE: "unit-release",
   BETTER_AUTH_URL: "http://localhost:8787",
   BETTER_AUTH_SECRET: "public-test-secret-not-to-be-logged",
+  GITHUB_OAUTH_REGISTRATION_KIND: "oauth_app",
   TRUSTED_ORIGINS: ["http://localhost:8787"],
 };
 

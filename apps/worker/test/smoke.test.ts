@@ -117,6 +117,7 @@ describe("Worker smoke suite", () => {
         password: "correct-horse-battery-staple",
       }),
     });
+    expect(signUp.status).toBe(200);
     const cookie = signUp.headers.get("set-cookie")?.split(";")[0] ?? "";
     const authed = { ...ORIGIN, cookie };
     const stamp = Date.now();
@@ -174,20 +175,23 @@ describe("Worker smoke suite", () => {
         password: "correct-horse-battery-staple",
       }),
     });
+    expect(signUp.status).toBe(200);
     const cookie = signUp.headers.get("set-cookie")?.split(";")[0] ?? "";
     const authed = { ...ORIGIN, cookie };
     const slug = `flagorg-${Date.now()}`;
 
-    await fetch(`${BASE}/api/auth/organization/create`, {
+    const organization = await fetch(`${BASE}/api/auth/organization/create`, {
       method: "POST",
       headers: authed,
       body: JSON.stringify({ name: slug, slug }),
     });
-    await fetch(`${BASE}/api/auth/organization/set-active`, {
+    expect(organization.status).toBe(200);
+    const active = await fetch(`${BASE}/api/auth/organization/set-active`, {
       method: "POST",
       headers: authed,
       body: JSON.stringify({ organizationSlug: slug }),
     });
+    expect(active.status).toBe(200);
 
     const res = await fetch(`${BASE}/admin/flags`, {
       method: "PUT",

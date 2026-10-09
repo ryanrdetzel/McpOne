@@ -6,15 +6,22 @@ import {
   PolicyPattern,
   RunStatus,
 } from "@scaffold/schema/execution";
+import { jsonProblem } from "@scaffold/schema/integrations";
 import type { Context } from "hono";
 import {
   ControlError,
-  type createExecutionService,
+  type ExecutionService,
   type RunView,
 } from "./execution/service";
 import type { OrgRoleResult } from "./guard";
+import {
+  type IntegrationApi,
+  type IntegrationApiSchema,
+  type IntegrationOwnerServices,
+  IntegrationRoutes,
+} from "./integrations/routes";
+import { readJsonBody } from "./strict-json";
 
-type Service = ReturnType<typeof createExecutionService>;
 type Owner = Extract<OrgRoleResult, { ok: true }>;
 const Id = z.string().uuid();
 const ProfileParams = z.object({ profileId: Id });
@@ -44,6 +51,26 @@ const Run = z
     error: ExecutionError.optional(),
     result: z.unknown().optional(),
     attempts: z.number().int(),
+    outboundRequests: z.number().int().min(0).max(30).optional(),
+    effectState: z
+      .enum([
+        "not_dispatched",
+        "verified_no_effect",
+        "provider_idempotent",
+        "possible",
+        "completed",
+      ])
+      .optional(),
+    logs: z
+      .array(
+        z
+          .object({
+            level: z.enum(["log", "info", "warn", "error"]),
+            text: z.string(),
+          })
+          .strict(),
+      )
+      .optional(),
   })
   .passthrough();
 const ErrorBody = z.object({ error: ExecutionError });
@@ -62,7 +89,7 @@ const errors = {
 };
 
 /** Domain/SQL clocks use epoch milliseconds; public dates follow the API blueprint. */
-function ownerRunView(run: RunView) {
+function ownerRunView(run: RunView): z.infer<typeof Run> {
   return {
     ...run,
     createdAt: new Date(run.createdAt).toISOString(),
@@ -79,9 +106,11 @@ export class ControlRoutes {
     service,
     env,
     requireOrgRole,
+    integrations,
   }: {
-    service: Service;
+    service: ExecutionService;
     env: Env;
+    integrations?: IntegrationOwnerServices;
     requireOrgRole(
       c: Context,
       roles: readonly string[],
@@ -134,6 +163,50 @@ export class ControlRoutes {
         );
       }
       c.set("owner", owner);
+      const binaryUpload =
+        c.req.method === "POST" && c.req.path.endsWith("/artifacts");
+      if (
+        !binaryUpload &&
+        c.req.raw.body &&
+        (c.req.header("Content-Type") ?? "")
+          .toLowerCase()
+          .startsWith("application/json")
+      ) {
+        try {
+          const body = await readJsonBody(
+            c.req.raw.clone(),
+            c.req.path.includes("/integrations")
+              ? 12 * 1024 * 1024
+              : 1024 * 1024,
+            128,
+          );
+          if (
+            jsonProblem(
+              body,
+              c.req.path.includes("/integrations")
+                ? 12 * 1024 * 1024
+                : 1024 * 1024,
+              128,
+            )
+          )
+            throw new SyntaxError("Invalid bounded JSON");
+          c.req.json = async <T>() => body as T;
+        } catch (error) {
+          return c.json(
+            {
+              error: {
+                code:
+                  error instanceof RangeError
+                    ? "payload_too_large"
+                    : "invalid_request",
+                message: "Invalid bounded control request.",
+                retryable: false,
+              },
+            },
+            error instanceof RangeError ? 413 : 400,
+          );
+        }
+      }
       await next();
     });
     api.onError((error, c) => {
@@ -163,7 +236,7 @@ export class ControlRoutes {
       );
     });
 
-    this.api = api
+    const controlApi = api
       .openapi(
         createRoute({
           method: "post",
@@ -232,6 +305,7 @@ export class ControlRoutes {
             input.expiresAt == null
               ? input.expiresAt
               : Date.parse(input.expiresAt),
+            c.get("owner").userId,
           );
           return c.json(
             {
@@ -506,6 +580,17 @@ export class ControlRoutes {
             200,
           ),
       );
+    const integrationApi: IntegrationApi | undefined = integrations
+      ? new IntegrationRoutes(integrations).api
+      : undefined;
+    this.api = integrationApi
+      ? controlApi.route<
+          "/",
+          { Variables: { owner: Owner } },
+          IntegrationApiSchema,
+          "/"
+        >("/", integrationApi)
+      : controlApi;
   }
 }
 

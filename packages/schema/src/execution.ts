@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** M1 subset only; this does not freeze the full D12 import/runtime contract. */
+/** Preserve the M1 metadata/fingerprint envelope; M2 source contracts live in integrations.ts. */
 export const EXECUTION_CONTRACT_VERSION = "0.1.1-m1" as const;
 export const MCP_PROTOCOL_VERSION = "2025-06-18" as const;
 export const EXECUTION_META_NAMESPACE =
@@ -74,6 +74,32 @@ export const ExecutionErrorCode = z.enum([
   "invalid_arguments",
   "unsupported_protocol",
   "unsupported_feature",
+  "unsupported_schema",
+  "import_invalid",
+  "reference_forbidden",
+  "reference_limit",
+  "schema_limit",
+  "name_collision",
+  "metadata_collision",
+  "publication_conflict",
+  "integration_disabled",
+  "account_missing",
+  "account_disabled",
+  "account_incompatible",
+  "account_scope_required",
+  "account_identity_changed",
+  "account_expired",
+  "account_revoked",
+  "credential_unavailable",
+  "oauth_unavailable",
+  "oauth_state_invalid",
+  "oauth_consent_denied",
+  "broker_forbidden",
+  "capacity_exceeded",
+  "upstream_rejected",
+  "upstream_unavailable",
+  "unsupported_result",
+  "sandbox_limit",
   "payload_too_large",
   "idempotency_conflict",
   "policy_blocked",
@@ -95,10 +121,20 @@ export type ExecutionErrorCode = z.infer<typeof ExecutionErrorCode>;
 export const ExecutionError = z
   .object({
     code: ExecutionErrorCode,
-    message: z.string().min(1),
+    message: z
+      .string()
+      .min(1)
+      .refine((value) => {
+        if (hasLoneSurrogate(value) || value.length > 1024) return false;
+        let scalars = 0;
+        for (let i = 0; i < value.length; i++, scalars++)
+          if (value.charCodeAt(i) >= 0xd800 && value.charCodeAt(i) <= 0xdbff)
+            i++;
+        return scalars <= 512;
+      }, "Execution message exceeds its Unicode scalar bound"),
     retryable: z.boolean(),
     run_id: z.string().min(1).optional(),
-    retry_after_ms: z.number().int().nonnegative().optional(),
+    retry_after_ms: z.number().int().nonnegative().max(60_000).optional(),
   })
   .strict();
 export type ExecutionError = z.infer<typeof ExecutionError>;

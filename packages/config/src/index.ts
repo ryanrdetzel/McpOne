@@ -30,6 +30,17 @@ const EnvSchema = z
     APP_SLUG: z.string().min(1).default("mcpone"),
     BETTER_AUTH_SECRET: z.string().min(1).default(DEV_AUTH_SECRET),
     BETTER_AUTH_URL: HttpUrl.optional(),
+    GITHUB_OAUTH_CLIENT_ID: z
+      .string()
+      .regex(/^[A-Za-z0-9_.-]{1,128}$/)
+      .optional(),
+    GITHUB_OAUTH_CLIENT_SECRET: z
+      .string()
+      .regex(/^[\x21-\x7e]{1,4096}$/)
+      .optional(),
+    GITHUB_OAUTH_REGISTRATION_KIND: z
+      .enum(["oauth_app", "github_app"])
+      .default("oauth_app"),
     TRUSTED_ORIGINS: z
       .union([
         z.string().transform((value) =>
@@ -44,6 +55,19 @@ const EnvSchema = z
       .pipe(z.array(TrustedOrigin)),
   })
   .superRefine((value, ctx) => {
+    if (
+      Boolean(value.GITHUB_OAUTH_CLIENT_ID) !==
+      Boolean(value.GITHUB_OAUTH_CLIENT_SECRET)
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: [
+          value.GITHUB_OAUTH_CLIENT_ID
+            ? "GITHUB_OAUTH_CLIENT_SECRET"
+            : "GITHUB_OAUTH_CLIENT_ID",
+        ],
+        message: "GitHub OAuth registration requires both client bindings",
+      });
     if (value.NODE_ENV !== "production") return;
 
     if (

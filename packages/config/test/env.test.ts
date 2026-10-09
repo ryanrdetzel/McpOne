@@ -83,4 +83,27 @@ describe("explicit runtime bindings", () => {
     expect(() => parseEnv({ BETTER_AUTH_SECRET: 123 })).toThrow(ZodError);
     expect(() => parseEnv({ TRUSTED_ORIGINS: [false] })).toThrow(ZodError);
   });
+
+  it.each([
+    { NODE_ENV: "development", GITHUB_OAUTH_CLIENT_ID: "public-dev-client" },
+    {
+      ...production,
+      GITHUB_OAUTH_CLIENT_SECRET: "development-placeholder-not-a-credential",
+    },
+  ])(
+    "rejects partial OAuth registrations rather than disabling them silently",
+    (bindings) => {
+      expect(() => parseEnv(bindings)).toThrow(ZodError);
+    },
+  );
+
+  it("rejects unsupported OAuth registration kinds instead of guessing from client IDs", () => {
+    expect(() =>
+      parseEnv({
+        GITHUB_OAUTH_CLIENT_ID: "public-dev-client",
+        GITHUB_OAUTH_CLIENT_SECRET: "development-placeholder-not-a-credential",
+        GITHUB_OAUTH_REGISTRATION_KIND: "inferred",
+      }),
+    ).toThrow(ZodError);
+  });
 });

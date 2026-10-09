@@ -2,9 +2,13 @@ import type { Env } from "@scaffold/config";
 import type { Database } from "@scaffold/database";
 import { Hono } from "hono";
 import { createAuth } from "./auth";
-import { createExecutionService } from "./execution/service";
+import {
+  createExecutionService,
+  type ExecutionService,
+} from "./execution/service";
 import { createFlagService } from "./flags";
 import { createOrgRoleGuard } from "./guard";
+import type { IntegrationServices } from "./integrations/runtime";
 import { createLogger } from "./log";
 import { createMcpRoutes } from "./mcp";
 import { createRequestContext, headStrip } from "./middleware";
@@ -22,11 +26,14 @@ export type { ApiType } from "./routes";
 export function createApplication({
   env,
   db,
-  execution = createExecutionService({ db, secret: env.BETTER_AUTH_SECRET }),
+  integrations,
+  execution = integrations?.execution ??
+    createExecutionService({ db, secret: env.BETTER_AUTH_SECRET }),
 }: {
   env: Env;
   db: Database;
-  execution?: ReturnType<typeof createExecutionService>;
+  execution?: ExecutionService;
+  integrations?: IntegrationServices;
 }): Application {
   const auth = createAuth({ env, db });
   const flags = createFlagService(db);
@@ -39,9 +46,10 @@ export function createApplication({
   app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
   app.route(
     "/",
-    new ApiRoutes({ env, db, flags, requireOrgRole, execution }).api,
+    new ApiRoutes({ env, db, flags, requireOrgRole, execution, integrations })
+      .api,
   );
-  app.route("/mcp", createMcpRoutes(execution, env));
+  app.route("/mcp", createMcpRoutes(execution, env, integrations?.artifacts));
   app.onError((err, c) => {
     log.error({
       msg: "unhandled error",

@@ -5,7 +5,12 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./execution": "./src/execution/service.ts"
+    "./execution": "./src/execution/service.ts",
+    "./integrations": "./src/integrations/runtime.ts",
+    "./integrations/github": "./src/integrations/providers/github.ts",
+    "./integrations/sandbox": "./src/integrations/sandbox.ts",
+    "./integrations/transport": "./src/integrations/transport.ts",
+    "./integrations/tls": "./src/integrations/tls-wasm.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -13,17 +18,22 @@
   },
   "dependencies": {
     "@hono/zod-openapi": "1.5.1",
+    "@noble/hashes": "2.2.0",
     "@scaffold/config": "workspace:*",
     "@scaffold/database": "workspace:*",
     "@scaffold/schema": "workspace:*",
+    "@jitl/quickjs-wasmfile-release-sync": "0.32.0",
     "better-auth": "1.6.26",
     "drizzle-orm": "0.45.2",
     "hono": "4.13.0",
+    "pako": "3.0.2",
+    "quickjs-emscripten-core": "0.32.0",
+    "typescript": "5.9.3",
+    "yaml": "2.9.1",
     "zod": "4.4.3"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261008.1",
-    "typescript": "5.9.3",
     "vitest": "4.1.10"
   }
 }

@@ -6,7 +6,7 @@ import { createOrgRoleGuard } from "../src/guard";
 function guardApplication(
   session: {
     user: { id: string };
-    session: { activeOrganizationId?: string | null };
+    session: { id: string; activeOrganizationId?: string | null };
   } | null,
   membership: { role: string }[] = [],
 ) {
@@ -39,7 +39,7 @@ describe("active organization role guard", () => {
   it("rejects sessions without an active organization", async () => {
     const { app, where } = guardApplication({
       user: { id: "user" },
-      session: {},
+      session: { id: "server-session" },
     });
     const response = await app.request("/");
     expect(await response.json()).toEqual({
@@ -55,7 +55,7 @@ describe("active organization role guard", () => {
       const { app } = guardApplication(
         {
           user: { id: "user" },
-          session: { activeOrganizationId: "active-org" },
+          session: { id: "server-session", activeOrganizationId: "active-org" },
         },
         membership,
       );
@@ -74,17 +74,18 @@ describe("active organization role guard", () => {
       const { app } = guardApplication(
         {
           user: { id: "user" },
-          session: { activeOrganizationId: "active-org" },
+          session: { id: "server-session", activeOrganizationId: "active-org" },
         },
         [{ role }],
       );
       const response = await app.request("/", {
-        headers: { cookie: "session=token" },
+        headers: { cookie: "session=token", "x-session-id": "caller-override" },
       });
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({
         ok: true,
         userId: "user",
+        sessionId: "server-session",
         organizationId: "active-org",
       });
     },

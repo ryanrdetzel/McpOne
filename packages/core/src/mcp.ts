@@ -1,13 +1,11 @@
 import type { Env } from "@scaffold/config";
 import {
   EXECUTION_CONTRACT_VERSION,
-  EXECUTION_FALLBACK_PREFIX,
   EXECUTION_META_NAMESPACE,
   ExecutionResponseMetadata,
   InitializeParams,
   MCP_PROTOCOL_VERSION,
   McpRequest,
-  RunControl,
   RunsGetArguments,
   ToolsCallParams,
   ToolsListParams,
@@ -15,11 +13,19 @@ import {
 import { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { z } from "zod";
-import { ControlError, type createExecutionService } from "./execution/service";
+import { toolResult } from "./execution/presentation";
+import {
+  ControlError,
+  type ExecutionService,
+  type RunView,
+} from "./execution/service";
+import type { ArtifactService } from "./integrations/artifacts";
 import { readJsonBody } from "./strict-json";
 
-type Service = ReturnType<typeof createExecutionService>;
-type RunView = Awaited<ReturnType<Service["getRun"]>>;
+const DiscoveryParams = ToolsListParams.extend({
+  cursor: z.string().max(80).optional(),
+}).strict();
+
 const responseEncoder = new TextEncoder();
 // Service validation records malformed business inputs/metadata as durable failed Runs.
 const InvocationEnvelope = ToolsCallParams.omit({
@@ -30,45 +36,74 @@ const InvocationEnvelope = ToolsCallParams.omit({
   _meta: z.record(z.string(), z.unknown()).optional(),
 });
 
-function toolResult(run: RunView) {
-  const provenance = { run_id: run.runId, tool: run.tool };
-  const control = RunControl.parse({
-    ...provenance,
-    status: run.status,
-    ...(run.approvalLink ? { approval_url: run.approvalLink } : {}),
-    ...(run.error ? { error: run.error } : {}),
-  });
-  const content = [];
-  if (run.result !== undefined)
-    content.push({ type: "text" as const, text: JSON.stringify(run.result) });
-  content.push({
-    type: "text" as const,
-    text: EXECUTION_FALLBACK_PREFIX + JSON.stringify(control),
-  });
-  return {
-    content,
-    ...(run.result &&
-    typeof run.result === "object" &&
-    !Array.isArray(run.result)
-      ? { structuredContent: run.result }
-      : {}),
-    isError:
-      Boolean(run.error) ||
-      [
-        "denied",
-        "blocked",
-        "expired",
-        "canceled",
-        "failed",
-        "outcome_unknown",
-      ].includes(run.status),
-    _meta: { [EXECUTION_META_NAMESPACE]: provenance },
-  };
-}
-
 /** Stateless Streamable HTTP JSON responses; durable Runs outlive all MCP connections. */
-export function createMcpRoutes(service: Service, env: Env) {
+export function createMcpRoutes(
+  service: ExecutionService,
+  env: Env,
+  artifacts?: ArtifactService,
+) {
   const app = new Hono();
+  if (artifacts)
+    app.on(["GET", "HEAD"], "/:profileId/artifacts/:artifactId", async (c) => {
+      c.header("Cache-Control", "no-store");
+      const origin = c.req.header("Origin");
+      if (origin && !env.TRUSTED_ORIGINS.includes(origin))
+        return c.json(
+          {
+            error: {
+              code: "forbidden",
+              message: "Untrusted request origin",
+              retryable: false,
+            },
+          },
+          403,
+        );
+      try {
+        const match = /^Bearer ([^\s]+)$/.exec(
+          c.req.header("Authorization") ?? "",
+        );
+        const grant = await service.authenticate(
+          c.req.param("profileId"),
+          match?.[1] ?? "",
+        );
+        return await artifacts.download(
+          {
+            kind: "grant",
+            orgId: grant.orgId,
+            profileId: grant.profileId,
+            grantId: grant.id,
+            principalId: grant.principalId ?? null,
+          },
+          c.req.param("artifactId"),
+          {
+            method: c.req.method === "HEAD" ? "HEAD" : "GET",
+            range: c.req.header("Range"),
+          },
+        );
+      } catch (error) {
+        if (error instanceof ControlError)
+          return c.json(
+            {
+              error: {
+                code: error.code,
+                message: error.message,
+                retryable: false,
+              },
+            },
+            error.status as ContentfulStatusCode,
+          );
+        return c.json(
+          {
+            error: {
+              code: "internal_error",
+              message: "Artifact retrieval failed safely.",
+              retryable: false,
+            },
+          },
+          500,
+        );
+      }
+    });
   app.all("/:profileId", async (c) => {
     c.header("Cache-Control", "no-store");
     c.header("MCP-Protocol-Version", MCP_PROTOCOL_VERSION);
@@ -249,14 +284,14 @@ export function createMcpRoutes(service: Service, env: Env) {
         case "ping":
           return respond({});
         case "tools/list": {
-          if (!ToolsListParams.safeParse(request.params ?? {}).success)
+          const page = DiscoveryParams.safeParse(request.params ?? {});
+          if (!page.success)
             return rpcError(-32602, {
               code: "invalid_request",
               message: "Invalid tools/list parameters",
               retryable: false,
             });
-          const tools = await service.discover(grant);
-          return respond({ tools });
+          return respond(await service.discoveryPage(grant, page.data.cursor));
         }
         case "tools/call": {
           const input = InvocationEnvelope.safeParse(request.params);
@@ -297,6 +332,7 @@ export function createMcpRoutes(service: Service, env: Env) {
               toolResult({
                 ...previous,
                 result: undefined,
+                businessResult: undefined,
                 error: {
                   code: error.code,
                   message: error.message,

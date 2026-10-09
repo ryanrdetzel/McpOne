@@ -7,13 +7,13 @@ interface SessionReader {
   api: {
     getSession(input: { headers: Headers }): Promise<{
       user: { id: string };
-      session: { activeOrganizationId?: string | null };
+      session: { id: string; activeOrganizationId?: string | null };
     } | null>;
   };
 }
 
 export type OrgRoleResult =
-  | { ok: true; userId: string; organizationId: string }
+  | { ok: true; userId: string; sessionId: string; organizationId: string }
   | { ok: false; error: string };
 
 /** A role is always relative to the session's active organization, never global. */
@@ -40,6 +40,11 @@ export function createOrgRoleGuard(auth: SessionReader, db: Database) {
     if (!membership || !roles.includes(membership.role)) {
       return { ok: false, error: "insufficient_role" };
     }
-    return { ok: true, userId: session.user.id, organizationId };
+    return {
+      ok: true,
+      userId: session.user.id,
+      sessionId: session.session.id,
+      organizationId,
+    };
   };
 }

@@ -1,5 +1,7 @@
 /** Reject duplicate object names before JCS fingerprinting can lose their meaning. */
-export function parseStrictJson(source: string): unknown {
+export function parseStrictJson(source: string, maxDepth = 64): unknown {
+  if (!Number.isInteger(maxDepth) || maxDepth < 1 || maxDepth > 128)
+    throw new RangeError("Invalid JSON nesting limit");
   const parsed: unknown = JSON.parse(source);
   let offset = 0;
   function whitespace() {
@@ -15,7 +17,7 @@ export function parseStrictJson(source: string): unknown {
     return JSON.parse(source.slice(start, offset)) as string;
   }
   function value(depth: number) {
-    if (depth > 64) throw new SyntaxError("JSON nesting limit exceeded");
+    if (depth > maxDepth) throw new SyntaxError("JSON nesting limit exceeded");
     whitespace();
     if (source[offset] === "{") {
       offset++;
@@ -57,8 +59,9 @@ export function parseStrictJson(source: string): unknown {
 
 /** Bound bytes while reading, rather than trusting Content-Length or buffering arbitrarily. */
 export async function readJsonBody(
-  request: Request,
+  request: Pick<Request, "body">,
   limit = 1024 * 1024,
+  maxDepth = 64,
 ): Promise<unknown> {
   if (!request.body) throw new SyntaxError("JSON body required");
   const reader = request.body.getReader();
@@ -86,5 +89,6 @@ export async function readJsonBody(
   }
   return parseStrictJson(
     new TextDecoder("utf-8", { fatal: true }).decode(combined),
+    maxDepth,
   );
 }

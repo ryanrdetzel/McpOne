@@ -5,21 +5,25 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 // Separate disposable application: native version previews cannot isolate scheduler namespaces.
-const NAME = "mcpone-m1-proof";
+const milestone = process.env.PROOF_MILESTONE ?? "m1";
+if (milestone !== "m1" && milestone !== "m2")
+  throw new Error("PROOF_MILESTONE must be m1 or m2");
+const NAME = `mcpone-${milestone}-proof`;
 const PRODUCTION_APP = "375fd22e-ecf2-4d33-b9cb-44b85f5153da";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const stateDirectory = resolve(root, ".state");
-const stateFile = resolve(stateDirectory, "m1-hosted.json");
-const secretFile = resolve(stateDirectory, "m1-hosted.secrets.json");
+const stateFile = resolve(stateDirectory, `${milestone}-hosted.json`);
+const secretFile = resolve(stateDirectory, `${milestone}-hosted.secrets.json`);
 const home = process.env.CFL_CLIENT_HOME;
 const configPath = process.env.CFL_REMOTE_CONFIG;
 if (!home || !configPath)
   throw new Error(
     "Set CFL_CLIENT_HOME and CFL_REMOTE_CONFIG to the existing private lifecycle client",
   );
-if (process.env.M1_ALLOW_MUTATION !== "yes")
+const mutationFlag = `${milestone.toUpperCase()}_ALLOW_MUTATION`;
+if (process.env[mutationFlag] !== "yes")
   throw new Error(
-    "M1_ALLOW_MUTATION=yes is required for disposable hosted provisioning",
+    `${mutationFlag}=yes is required for disposable hosted provisioning`,
   );
 const moduleUrl = (name) => pathToFileURL(resolve(home, "dist/src", name)).href;
 const { loadRemoteConfig, connectRemote } = await import(
@@ -109,13 +113,13 @@ async function upload(origin) {
   snapshot.config.vars = {
     NODE_ENV: "production",
     APP_SLUG: "mcpone",
-    RELEASE: "m1-proof",
+    RELEASE: `${milestone}-proof`,
     BETTER_AUTH_URL: origin,
     TRUSTED_ORIGINS: origin,
   };
   snapshot.config.previewVars = { ...snapshot.config.vars };
-  snapshot.config.secretsFile = ".state/m1-hosted.secrets.json";
-  snapshot.config.previewSecretsFile = ".state/m1-hosted.secrets.json";
+  snapshot.config.secretsFile = `.state/${milestone}-hosted.secrets.json`;
+  snapshot.config.previewSecretsFile = `.state/${milestone}-hosted.secrets.json`;
   delete snapshot.config.hostname;
   delete snapshot.config.previewHostname;
   const {
@@ -185,24 +189,52 @@ try {
       };
     else state = {};
     if (!state.applicationId) {
-      const artifactId = await upload("https://m1-proof.invalid");
+      const artifactId = await upload(`https://${milestone}-proof.invalid`);
       await complete(
         await call("create_app", {
           name: NAME,
           artifactId,
-          requestId: `m1-proof-create-${artifactId}`,
+          requestId: `${milestone}-proof-create-${artifactId}`,
         }),
       );
     }
-    const app = await call("get_app", { applicationId: state.applicationId });
+    let app = await call("get_app", { applicationId: state.applicationId });
     if (
       !app.ok ||
       app.application?.name !== NAME ||
-      !app.application.url ||
+      app.application.applicationId === PRODUCTION_APP ||
+      !app.application.database?.databaseId ||
       app.application.database?.databaseId ===
         "95a44e24-b138-4960-bc5c-a5e8cc11e607"
     )
       throw new Error("Proof environment isolation/read-back failed");
+    if (!app.application.url) {
+      const databaseId = app.application.database.databaseId;
+      if (app.application.status !== "failed")
+        throw new Error(
+          "Proof bootstrap is still pending; inspect its operation",
+        );
+      // A failed pre-publication migration can leave the owned empty proof
+      // application provisioned. Publish the corrected artifact to that same
+      // Worker/D1 identity; never create a replacement or alter its ledger.
+      const artifactId = await upload(`https://${milestone}-proof.invalid`);
+      await complete(
+        await call("deploy", {
+          applicationId: state.applicationId,
+          artifactId,
+          requestId: `${milestone}-proof-recover-${artifactId}`,
+        }),
+      );
+      app = await call("get_app", { applicationId: state.applicationId });
+      if (
+        !app.ok ||
+        app.application?.name !== NAME ||
+        app.application.applicationId !== state.applicationId ||
+        app.application.database?.databaseId !== databaseId ||
+        !app.application.url
+      )
+        throw new Error("Corrected proof bootstrap did not publish a URL");
+    }
     state.url = app.application.url;
     state.databaseId = app.application.database.databaseId;
     await save();
@@ -211,7 +243,7 @@ try {
       await call("deploy", {
         applicationId: state.applicationId,
         artifactId,
-        requestId: `m1-proof-config-${artifactId}`,
+        requestId: `${milestone}-proof-config-${artifactId}`,
       }),
     );
     const verified = await call("get_app", {
@@ -278,7 +310,7 @@ try {
       await call("deploy", {
         applicationId: state.applicationId,
         artifactId,
-        requestId: `m1-proof-${command === "migrate" ? "migrate" : "restart"}-${artifactId}`,
+        requestId: `${milestone}-proof-${command === "migrate" ? "migrate" : "restart"}-${artifactId}`,
         ...(durableObjectMigration ? { durableObjectMigration } : {}),
       }),
     );
@@ -305,7 +337,7 @@ try {
       await call("delete_app", {
         applicationId: state.applicationId,
         confirmName: NAME,
-        requestId: `m1-proof-delete-${state.applicationId}`,
+        requestId: `${milestone}-proof-delete-${state.applicationId}`,
       }),
     );
     await rm(secretFile, { force: true });

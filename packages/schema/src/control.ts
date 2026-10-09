@@ -32,6 +32,7 @@ export const controlTools = sqliteTable(
     name: text("name").notNull(),
     activeRevision: text("active_revision").notNull(),
     createdAt: time("created_at"),
+    integrationId: text("integration_id"),
   },
   (t) => [uniqueIndex("control_tools_org_name").on(t.orgId, t.name)],
 );
@@ -44,6 +45,11 @@ export const controlToolRevisions = sqliteTable(
       .references(() => controlTools.id, { onDelete: "cascade" }),
     revision: text("revision").notNull(),
     inputSchema: text("input_schema").notNull(),
+    inputSchemaFormat: text("input_schema_format")
+      .notNull()
+      .default("inline_json"),
+    integrationRevisionId: text("integration_revision_id"),
+    definitionIndex: integer("definition_index"),
     createdAt: time("created_at"),
   },
   (t) => [
@@ -80,6 +86,7 @@ export const controlProfileTools = sqliteTable(
       .notNull()
       .references(() => controlTools.id, { onDelete: "cascade" }),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    toolRevision: text("tool_revision"),
   },
   (t) => [
     uniqueIndex("control_profile_tools_membership").on(t.profileId, t.toolId),
@@ -94,6 +101,7 @@ export const controlGrants = sqliteTable(
       .notNull()
       .references(() => controlProfiles.id, { onDelete: "cascade" }),
     label: text("label").notNull(),
+    principalId: text("principal_id"),
     tokenHash: text("token_hash").notNull().unique(),
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
     revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
@@ -133,6 +141,17 @@ export const controlRuns = sqliteTable(
     toolRevision: text("tool_revision").notNull(),
     status: text("status").notNull(),
     fingerprint: text("fingerprint"),
+    fingerprintVersion: text("fingerprint_version").notNull().default("m1"),
+    integrationId: text("integration_id"),
+    integrationRevisionId: text("integration_revision_id"),
+    artifactDigest: text("artifact_digest"),
+    resultFormat: text("result_format").notNull().default("legacy_json"),
+    wallTimeoutMs: integer("wall_timeout_ms").notNull().default(60000),
+    outboundRemaining: integer("outbound_remaining").notNull().default(30),
+    effectState: text("effect_state").notNull().default("not_dispatched"),
+    effectEvidenceJson: text("effect_evidence_json"),
+    claimEpoch: integer("claim_epoch"),
+    admissionReady: integer("admission_ready").notNull().default(1),
     traceId: text("trace_id"),
     policyDecision: text("policy_decision").notNull(),
     displayJson: text("display_json").notNull(),
@@ -164,6 +183,9 @@ export const controlRunPayloads = sqliteTable("control_run_payloads", {
   orgId: org(),
   requestCipher: text("request_cipher"),
   resultCipher: text("result_cipher"),
+  resultFormat: text("result_format").notNull().default("legacy_json"),
+  requestChunkCount: integer("request_chunk_count").notNull().default(0),
+  resultChunkCount: integer("result_chunk_count").notNull().default(0),
   expiresAt: time("expires_at"),
 });
 export const controlApprovals = sqliteTable("control_approvals", {

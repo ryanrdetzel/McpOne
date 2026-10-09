@@ -10,7 +10,7 @@ The old PostgreSQL listener, startup migrations, Docker image, Compose setup, an
 
 ## Local startup
 
-Requirements: Node 22.18 or newer within Node 22, and pnpm 11.20.0. Docker and a Cloudflare login are not required for local development.
+Requirements: Node 22.18 or newer within Node 22, pnpm 11.20.0, Python 3 and `tar`. OpenSSL 3 is required for the certificate behavior tests. Docker and a Cloudflare login are not required for local development. The first WASM build downloads a checksum-pinned public Emscripten SDK and Mbed TLS source into ignored `.state/m2-toolchain/`; subsequent builds reuse the verified cache. Compiler tooling is build-only, not a runtime service.
 
 ```sh
 corepack enable
@@ -20,12 +20,12 @@ pnpm run setup
 pnpm dev
 ```
 
-Open **http://localhost:3000**. Setup creates `apps/worker/.dev.vars` from its public development example without replacing an existing file. `dev` builds the SPA, applies committed migrations to local D1, and starts the actual Workers runtime. Worker/library source changes reload automatically; after rebuilding `@scaffold/web`, restart the Worker dev server and refresh so its asset manifest matches the new output.
+Open **http://localhost:3000**. Setup creates `apps/worker/.dev.vars` from its public development example without replacing an existing file. `dev` finishes the SPA and Worker/WASM builds, applies committed migrations to local D1, then starts the actual Workers runtime. Wrangler runs the same prebuilt Worker bundle used by the production lifecycle; the real TypeScript compiler is bundled with browser-host initialization and an immutable source-only compiler host. After server/library edits, stop the listener, run `pnpm build`, apply new migrations, then restart. After rebuilding frontend assets, restart the listener and refresh so its asset manifest matches the new output. Do not leave a stale Node/Worker process draining queues against a changed schema.
 
 If port 3000 is occupied, use matching auth/origin bindings on another port:
 
 ```sh
-pnpm --filter @scaffold/web build
+pnpm build
 pnpm db:migrate
 pnpm --filter @scaffold/worker exec wrangler dev --ip 127.0.0.1 --port 3030 --var BETTER_AUTH_URL:http://localhost:3030 --var TRUSTED_ORIGINS:http://localhost:3030
 ```
@@ -83,6 +83,8 @@ Local startup and tests need no production credentials or Cloudflare login. `cf:
 ## D1 migrations
 
 Committed production migrations live in `packages/database/migrations/` and are applied by the lifecycle controller **before publication**, not by the Worker at request/startup time. Use nonempty ordered names such as `0001_add_field.sql`. Never edit an applied migration: its name and hash are recorded.
+
+M2's unreleased `0004_m2_artifacts.sql` received an explicit, narrowly scoped draft correction for native D1's trigger parser: four `CASE` expressions are parenthesized without changing their scope guards (decision: [DET-1390](https://linear.app/detzel/issue/DET-1390)). Earlier disposable M2 databases contain the old hash. Preserve them and select a **fresh** `SQLITE_PATH` for direct Node or a fresh Wrangler `--persist-to` directory; do not rewrite migration ledgers or reuse those old paths. Native-applied `0000`–`0003` are unchanged. The normal prohibition on editing applied migrations remains in force.
 
 `db:generate` writes only to ignored `packages/database/generated/`. Review candidates against committed migrations and promote only additive changes into a **new** committed migration. On a fresh checkout, generation produces a full-schema candidate, not an automatically safe delta. Do not blindly deploy that candidate to an existing database. Keep schema changes compatible with currently running production code; this controller does not provide automatic database rollback or backup/restore.
 
@@ -206,8 +208,65 @@ Set `M1_BASE_URL` to the returned isolated origin and `M1_STATE_FILE=.state/m1-c
 Successful proof deletion clears the cached target identity and removes its isolated secret file. Provisioning trusts the controller's live owned-app list, not a deleted cached ID; the next `provision` starts a fresh isolated application/database/secret.
 
 
+## M2 isolated proof environment
+
+M2 implementation and acceptance are tracked by [DET-1382](https://linear.app/detzel/issue/DET-1382) and the [execution brief](https://linear.app/detzel/document/m2-execution-brief-tool-sources-and-accounts-2b01065d9c97). Provisioning an environment does not establish M2 acceptance.
+
+The same lifecycle proof launcher supports a separate **`mcpone-m2-proof`** application. With the private lifecycle prerequisites above configured and builds complete:
+
+```sh
+export M2_ALLOW_MUTATION=yes
+pnpm m2:hosted provision
+pnpm m2:hosted status
+pnpm m2:hosted redeploy
+# After verification, delete only this owned disposable environment:
+pnpm m2:hosted delete
+```
+
+The M2 launcher uses `.state/m2-hosted.json` and a distinct mode-0600 `.state/m2-hosted.secrets.json`; it does not reuse M1 state or production secrets/data. It preserves the same live target/database isolation checks and deployment lifecycle. No paid upgrade or production mutation is authorized. Real Provider credentials and OAuth registration/consent are separate prerequisites and must never appear in command arguments or logs.
+
+Worker TypeScript execution now **fails closed with `tool_unavailable`** until a strict native CPU executor is accepted. The nominal 100ms Worker Loader prototype consumed 2.1 seconds in its native probe; its executable adapter, carrier and bindings have been removed rather than retained as a fallback. The user approved a reduced deliverable: reachable broker/multipart verification, owned fixture cleanup and change-set reduction. Strict CPU, authorized Provider/OAuth cells and actual elapsed-retention acceptance remain deferred/open; this is **not completed M2**. Do not upload/deploy or release a controller as part of this pass. The existing native proof deployment remains unchanged. See [DET-1390](https://linear.app/detzel/issue/DET-1390) and [the architecture decisions](ARCHITECTURE.md#decision-records).
+
+If the owned proof app failed during pre-publication migration and has no URL, `provision` publishes the corrected artifact to the **same** application and D1 identities before binding its real origin. It rejects pending bootstrap and non-proof/production identities; it never resets the database, alters migration history, or creates a replacement merely to recover failure.
+
+### M2 owner APIs and credential custody
+
+The current M2 contract is [M2-CONTRACT.md](docs/M2-CONTRACT.md); acceptance remains open until the recorded local/hosted gates pass. Administration uses the existing same-origin authenticated organization-owner session, not a Grant token. `/openapi.json` exposes the exact request/response schemas.
+
+- Create a source draft with `POST /api/control/integrations`; validate it with `POST /api/control/integrations/{id}/validate`. Validation compiles immutable relative TypeScript modules or reviews HTTP/OpenAPI/remote manifests; it never invokes a business operation.
+- Publish the reviewed revision with `POST /api/control/integrations/{id}/publish`, its report digest, expected current revision, and explicit Profile Tools/bindings/policies. Drafts are neither discoverable nor callable. Refresh and rollback also require explicit review; they do not auto-publish upstream drift.
+- Normalized definitions and review metadata have an aggregate **8 MiB canonical-JSON budget**, independent of retained raw documents and the existing 5 MiB root/20 MiB reference-graph/500-operation input limits. Oversized expansion is rejected before publication, not silently truncated. Complete MCP responses and OAuth impact previews remain limited to 1 MiB.
+- Manage named Accounts at `/api/control/accounts`. Native verification establishes identity and actual permissions; submitted scope/identity assertions are not trusted claims. User Accounts belong to their immutable owner; Workspace Accounts are explicitly shared. Grant principals come from the authenticated issuing user and remain eligible with any current organization role.
+- Start consent at `POST /api/control/accounts/oauth/start`. Its required impact report separates currently bound Profile Tools from owner-selected validated-draft proposals marked noncallable. Requested scope sufficiency is hypothetical, not verified availability; denial preserves the existing credential and unrelated valid operations. Consent never changes Profile membership, policy, or outbound permissions.
+- Protected artifact upload/download lives under `/api/control/artifacts`; caller downloads use `/mcp/{profileId}/artifacts/{artifactId}` with the exact live Grant. References are not credentials or public URLs. Range requests are unsupported.
+
+The initial native Provider is GitHub. Use a **dedicated GitHub OAuth App** with expiring tokens for resource-scope upgrades and rotating refresh; current [GitHub documentation](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps) supports PKCE S256 and `offline_access`. GitHub App fine-grained permissions must not be presented as OAuth resource scopes. `offline_access` selects expiring-token acquisition, not resource access. Actual new/refreshed tokens are reverified against the user and registered client.
+
+Register the exact callback `<control-origin>/api/control/accounts/oauth/callback`. Private bindings are `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`, and `GITHUB_OAUTH_REGISTRATION_KIND` (`oauth_app`, or explicitly `github_app` for its distinct empty-resource-scope flow). Configure both client bindings or neither; absent registration fails closed. Local registration and tokens stay in the local app/database with its independent auth secret; load private local configuration through the documented ignored mode-0600 `LOCAL_CONFIG` file. Hosted registration is deployment-managed. Never put real client secrets/tokens in manifests, public examples, shell/tool arguments, or logs.
+
+Worker business egress uses vetted numeric sockets plus the static Mbed TLS engine, retaining original-host certificate/SNI verification; it does not fall back to native `fetch`. The fixed trusted DNS bootstrap uses `redirect: "manual"` because the native runtime rejects `"error"`, and explicitly rejects every non-200 response before parsing DNS data. Redirects are never followed. Public transport checks do not establish authorized Provider or OAuth acceptance.
+
+Authenticated remote discovery retains the 1 MiB JSON limit with a separate 64 KiB bounded framing allowance; omitted optional Account identity fields are excluded from canonical review metadata. Broker JSON responses are redacted after decoding as well as on the wire, including nested strings; credential-bearing object keys are rejected rather than renamed. These regression checks do not establish real Provider/OAuth acceptance.
+
+### M2 conformance
+
+After `pnpm check`, start the actual disposable **direct Node/SQLite app** on port 3030 and run `SMOKE_BASE_URL=http://localhost:3030 pnpm smoke`. `M2_RUNTIME=local` identifies that direct adapter, not local Wrangler. The M2 harness additionally exercises the owner API, real published Tools, protected content and durable Run behavior:
+
+```sh
+M2_ALLOW_MUTATION=yes M2_RUNTIME=local M2_BASE_URL=http://localhost:3030 pnpm m2:conformance
+```
+
+`M2_CONFIG_FILE` may select an ignored mode-0600 file containing explicitly approved disposable Provider identities/resources. Without those credentials the harness reports the three authenticated source cells pending; pure guests/public fixtures do not prove Provider or OAuth behavior. An isolated hosted run uses `M2_RUNTIME=hosted` and the dedicated M2 proof origin, never production. Native OAuth consent/refresh additionally requires dedicated registration and human consent; manual bearer success does not satisfy that gate.
+
+The harness supports `--phase=prepare` / `--phase=resume` around a real restart with the same database/secret, and `--phase=membership-prepare` / `--phase=membership-resume` around an explicitly reported synthetic membership fixture in the isolated native auth database. Resume requires `M2_RESTART_CONFIRMED=yes`; actual approval expiry requires `M2_EXPIRY_WAIT=yes` and the real fifteen-minute wait. Do not backdate rows or replace autonomous scheduler evidence with polling/manual drain. A hosted uncertain-write fixture must have an approved non-Cloudflare HTTPS origin: Workers raw sockets cannot connect to Cloudflare-hosted destinations. No native-fetch bypass is allowed.
+
+The approved reduced deliverable uses `pnpm m2:conformance --phase=surfaces` with the same isolated target, mutation flags and private controlled-HTTPS configuration. This runs protected artifact, broker permission/redirect and multipart boundaries without repeating the already-observed fault waits or claiming Provider/OAuth, strict CPU, retention or full M2 acceptance. Run it against the direct Node adapter; current Worker TypeScript probes intentionally fail closed.
+
+Run hosted `pnpm smoke` and signup-intensive conformance phases **serially**, not concurrently against the same target. Better Auth's production sign-in/sign-up defaults permit three requests per path in ten seconds; overlapping synthetic signup clients can consume the same IP bucket. Preserve that production protection. Smoke setup asserts signup, organization creation and active-session transitions before using their cookie; do not treat a rate-limited setup as an application authorization regression or add silent retries.
+
+
 ## Conventions and product scope
 
 Preserve the pnpm workspace, Zod contracts, Hono RPC/OpenAPI, organization-scoped authorization, structured request/error logs, echoed request IDs, bodyless HEAD responses, and one-origin SPA routing. Keep platform-only code in `apps/worker` or `apps/local`; domain behavior belongs in shared libraries. Production rejects missing/default/short auth secrets and absent/mismatched trusted origins.
 
-The approved M1 brief/PRD now supply product requirements. The public dashboard reports infrastructure health without exposing private workspace data; the owner CLI/API demonstrates M1 execution. External integrations/Accounts, Tool authoring/imports, rich owner UI/notifications, export/restore/full configurable retention, native MCP Tasks, and required-client launch certification are not claimed by this milestone.
+The approved M1 brief/PRD supplies the completed M1 requirements; M2 integrations, Accounts and authoring are tracked separately and are not declared accepted merely because their code is present. The public dashboard reports infrastructure health without exposing private workspace data. Rich M3 owner UI/notifications and M4 export/restore/retention, native MCP Tasks and launch-client certification remain outside this implementation.

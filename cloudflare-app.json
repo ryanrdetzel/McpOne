@@ -1,5 +1,6 @@
 {
   "entrypoint": "apps/worker/dist/index.js",
+  "wasmModules": [{ "name": "tls.wasm", "path": "apps/worker/dist/tls.wasm" }],
   "compatibilityDate": "2026-10-02",
   "compatibilityFlags": ["nodejs_compat"],
   "database": true,

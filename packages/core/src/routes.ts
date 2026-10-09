@@ -10,15 +10,17 @@ import {
 } from "@scaffold/schema";
 import type { Context } from "hono";
 import { ControlRoutes } from "./control-routes";
-import type { createExecutionService } from "./execution/service";
+import type { ExecutionService } from "./execution/service";
 import type { FlagService } from "./flags";
 import type { OrgRoleResult } from "./guard";
+import type { IntegrationOwnerServices } from "./integrations/routes";
 
 export interface RouteDependencies {
   env: Env;
   db: Database;
   flags: FlagService;
-  execution?: ReturnType<typeof createExecutionService>;
+  execution?: ExecutionService;
+  integrations?: IntegrationOwnerServices;
   requireOrgRole(c: Context, roles: readonly string[]): Promise<OrgRoleResult>;
 }
 
@@ -32,6 +34,7 @@ export class ApiRoutes {
     flags,
     requireOrgRole,
     execution,
+    integrations,
   }: RouteDependencies) {
     this.api = new OpenAPIHono()
       .openapi(
@@ -146,11 +149,16 @@ export class ApiRoutes {
     if (execution) {
       this.api.route(
         "/api/control",
-        new ControlRoutes({ service: execution, env, requireOrgRole }).api,
+        new ControlRoutes({
+          service: execution,
+          env,
+          requireOrgRole,
+          integrations,
+        }).api,
       );
     }
 
-    this.api.doc("/openapi.json", {
+    this.api.doc31("/openapi.json", {
       openapi: "3.1.0",
       info: { title: `${env.APP_SLUG} api`, version: env.RELEASE },
     });

@@ -1,0 +1,61 @@
+{
+  "format": "mcpone-tls-wasm-source-v1",
+  "engine": {
+    "name": "Mbed TLS",
+    "version": "3.6.7",
+    "versionNumber": "0x03060700",
+    "release": "https://github.com/Mbed-TLS/mbedtls/releases/tag/mbedtls-3.6.7",
+    "source": "https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.7/mbedtls-3.6.7.tar.bz2",
+    "sha256": "a7e8bcbec0e6f761b4af24f25677626b35f762f68eef79c08677a363212d11f6",
+    "license": "Apache-2.0",
+    "configuration": "packages/core/tls/mbedtls-config.h",
+    "bridge": "packages/core/tls/bridge.c"
+  },
+  "caBundle": {
+    "path": "apps/worker/tls/cacert.pem",
+    "source": "https://curl.se/ca/cacert-2026-09-25.pem",
+    "provenance": "https://curl.se/docs/caextract.html",
+    "sha256": "a41b5d356aea97a529fe27e0f7316d2f9d946d75927476cf9cf1b90637d00505",
+    "bytes": 188900,
+    "certificates": 121,
+    "license": "MPL-2.0",
+    "limitations": "The PEM carries certificate extensions, but not Firefox's separately configured trust-store domain constraints. Updates require a reviewed version/hash change, never a request-time download."
+  },
+  "runtime": {
+    "moduleName": "tls.wasm",
+    "output": "apps/worker/dist/tls.wasm",
+    "memoryBytes": 16777216,
+    "ioBytes": 16384,
+    "queueBytes": 65536,
+    "handshakeBytes": 262144,
+    "handshakeTimeoutMs": 10000,
+    "maxChainCertificates": 10,
+    "protocols": ["TLSv1.2"],
+    "keyExchange": ["ECDHE_RSA", "ECDHE_ECDSA"],
+    "aead": ["AES_128_GCM", "AES_256_GCM", "CHACHA20_POLY1305"],
+    "signatureHashes": ["SHA256", "SHA384", "SHA512"],
+    "certificateProfile": "Upstream mbedtls_x509_crt_profile_default; SHA1 parsing enabled only for legacy pinned trust-anchor self-signatures, never permitted peer/intermediate signatures or TLS key exchange.",
+    "alpn": ["http/1.1"],
+    "imports": ["mcpone.random", "mcpone.now", "mcpone.utc"],
+    "optionalTrapImports": ["wasi_snapshot_preview1.proc_exit", "env.abort"],
+    "exports": [
+      "memory",
+      "tls_version",
+      "tls_buffer",
+      "tls_buffer_size",
+      "tls_alloc",
+      "tls_free",
+      "tls_init",
+      "tls_destroy",
+      "tls_feed",
+      "tls_eof",
+      "tls_drain",
+      "tls_handshake",
+      "tls_read",
+      "tls_write",
+      "tls_close_notify"
+    ],
+    "certificateNetworkFetch": false,
+    "runtimeCompilation": false
+  }
+}

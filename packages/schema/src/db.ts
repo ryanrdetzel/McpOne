@@ -14,5 +14,8 @@ export const featureFlags = sqliteTable("feature_flags", {
     .default(sql`(cast((julianday('now') - 2440587.5) * 86400000 as integer))`),
 });
 
+export * from "./accounts-db";
+export * from "./artifacts-db";
 export * from "./auth";
+export * from "./catalog-db";
 export * from "./control";

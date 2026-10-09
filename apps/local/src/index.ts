@@ -4,19 +4,43 @@ import { extname, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { createApplication } from "@scaffold/core";
-import { createExecutionService } from "@scaffold/core/execution";
+import { createIntegrationServices } from "@scaffold/core/integrations";
+import { createGithubProvider } from "@scaffold/core/integrations/github";
+import { createQuickJSEngineFactory } from "@scaffold/core/integrations/sandbox";
 import { createDatabase } from "@scaffold/database";
 import { SQLiteBinding } from "@scaffold/database/sqlite";
 import { localConfiguration } from "./config";
+import { createLocalHttpTransport } from "./transport";
 
 const config = localConfiguration();
 const binding = new SQLiteBinding(config.databasePath);
 const db = createDatabase(binding);
-const execution = createExecutionService({
+const transport = createLocalHttpTransport();
+const integrations = createIntegrationServices({
   db,
   secret: config.env.BETTER_AUTH_SECRET,
+  transport,
+  engineFactory: createQuickJSEngineFactory(),
+  providers: [
+    createGithubProvider({
+      transport,
+      oauth:
+        config.env.GITHUB_OAUTH_CLIENT_ID &&
+        config.env.GITHUB_OAUTH_CLIENT_SECRET
+          ? {
+              kind: config.env.GITHUB_OAUTH_REGISTRATION_KIND,
+              clientId: config.env.GITHUB_OAUTH_CLIENT_ID,
+              clientSecret: config.env.GITHUB_OAUTH_CLIENT_SECRET,
+              callbackUrl: `${config.origin}/api/control/accounts/oauth/callback`,
+              controlOrigin: config.origin,
+              custody: "local",
+            }
+          : undefined,
+    }),
+  ],
 });
-const app = createApplication({ env: config.env, db, execution });
+const execution = integrations.execution;
+const app = createApplication({ env: config.env, db, integrations });
 await execution.drain();
 let draining: Promise<void> | undefined;
 const recoveryTimer = setInterval(() => {

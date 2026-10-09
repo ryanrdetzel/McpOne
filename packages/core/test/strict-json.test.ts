@@ -30,6 +30,31 @@ describe("execution transport JSON safety", () => {
     ).toThrow("JSON nesting limit");
   });
 
+  it("accepts supported schema document depth without relaxing business arguments", async () => {
+    let schema: unknown = { type: "string", enum: ["retained"] };
+    for (let depth = 0; depth < 32; depth++)
+      schema = {
+        type: "object",
+        properties: { value: schema },
+        required: ["value"],
+        additionalProperties: false,
+      };
+    const source = JSON.stringify({ schema });
+    expect(() => parseStrictJson(source)).toThrow("JSON nesting limit");
+    expect(parseStrictJson(source, 128)).toEqual({ schema });
+    const request = new Request("http://localhost/api/control/integrations", {
+      method: "POST",
+      body: source,
+    });
+    expect(await readJsonBody(request, source.length, 128)).toEqual({ schema });
+    expect(() =>
+      parseStrictJson(
+        `${"[".repeat(70)}{"value":1,"value":2}${"]".repeat(70)}`,
+        128,
+      ),
+    ).toThrow("Duplicate JSON property");
+  });
+
   it("bounds actual streamed bytes even without Content-Length", async () => {
     const request = new Request("http://localhost/mcp/profile", {
       method: "POST",

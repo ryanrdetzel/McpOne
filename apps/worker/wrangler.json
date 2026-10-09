@@ -1,7 +1,8 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "mcpone-local",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "no_bundle": true,
   "compatibility_date": "2026-10-02",
   "compatibility_flags": ["nodejs_compat"],
   "durable_objects": {

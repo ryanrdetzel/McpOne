@@ -73,6 +73,11 @@ export type RemoteMcpDependencies = {
     accountId: string,
     endpoint: string,
   ) => Promise<RemoteDiscoveryTransport>;
+  connectionTransport?: (
+    owner: RemoteOwnerContext,
+    credentialId: string,
+    endpoint: string,
+  ) => Promise<RemoteDiscoveryTransport>;
   describeAuthentication?: (
     owner: RemoteOwnerContext,
     accountId: string | undefined,
@@ -251,6 +256,9 @@ class Session {
   readonly prefix = crypto.randomUUID();
   get required(): boolean {
     return this.id !== undefined;
+  }
+  redact(text: string): string {
+    return this.id ? text.split(this.id).join("[redacted]") : text;
   }
   constructor(
     readonly endpoint: string,
@@ -818,6 +826,9 @@ function normalizeManifest(
         endpoint: source.endpoint,
         protocolVersion: REMOTE_MCP_PROTOCOL_VERSION,
         toolName: upstreamName,
+        ...(source.connectionCredentialId
+          ? { connectionCredentialId: source.connectionCredentialId }
+          : {}),
       },
     });
     if (!parsed.success) {
@@ -970,13 +981,24 @@ export function createRemoteMcpAdapter(dependencies: RemoteMcpDependencies) {
           "account_incompatible",
           "The selected discovery Account is not compatible with this endpoint.",
         );
-      const transport = source.accountId
-        ? await dependencies.discoveryTransport!(
+      if (source.connectionCredentialId && !dependencies.connectionTransport)
+        fail(
+          "account_incompatible",
+          "Trusted endpoint-bound credential custody is required.",
+        );
+      const transport = source.connectionCredentialId
+        ? await dependencies.connectionTransport!(
             owner,
-            source.accountId,
+            source.connectionCredentialId,
             source.endpoint,
           )
-        : dependencies.transport;
+        : source.accountId
+          ? await dependencies.discoveryTransport!(
+              owner,
+              source.accountId,
+              source.endpoint,
+            )
+          : dependencies.transport;
       const timer = clock(Date.now() + 10_000);
       const session = new Session(
         source.endpoint,
@@ -1043,10 +1065,15 @@ export function createRemoteMcpAdapter(dependencies: RemoteMcpDependencies) {
                 "import_invalid",
                 "The remote manifest has invalid or duplicate upstream Tool names.",
               );
+            const redact = (text: string) =>
+              session.redact(
+                "redact" in transport && typeof transport.redact === "function"
+                  ? transport.redact(text)
+                  : text,
+              );
             if (
-              "redact" in transport &&
-              typeof transport.redact === "function" &&
-              transport.redact(canonicalJson(tool)) !== canonicalJson(tool)
+              canonicalJson(redactJson(tool as JSONValue, redact)) !==
+              canonicalJson(tool)
             )
               fail(
                 "import_invalid",

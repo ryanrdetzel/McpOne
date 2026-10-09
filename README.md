@@ -62,6 +62,23 @@ The listener does not watch source. Stop and restart it after server edits, reta
 
 Use `PORT`, `BETTER_AUTH_URL`, and `TRUSTED_ORIGINS` with the same exact localhost origin if changing ports. Optional private bindings load from `LOCAL_CONFIG=/path/to/local.secrets.json` (ignored, mode `0600`); process environment overrides those bindings. Keep real credentials out of shell arguments and logs; `.env` is not implicitly loaded.
 
+### Owner MCP gateway UI
+
+Open **`/gateway`** on the running local application (for example, **http://localhost:3030/gateway**), or choose **MCP gateway** from the dashboard. Sign up/sign in, create or select a Workspace, then create an empty gateway Profile.
+
+1. Add an external **HTTPS Streamable HTTP** MCP endpoint with a unique namespace and optional bearer token. Credentials are encrypted server-side and bound to that exact endpoint; they are Workspace transport credentials, not independently verified Provider identities/scopes.
+2. Discover and review its accepted/rejected Tools. Select the Tools and **Allow / Ask / Block** decision explicitly before publishing to the selected Profile. Adding another server preserves the first server's selected Tools; names are namespaced.
+3. Issue a labeled Grant and copy the Profile endpoint and client configuration. The token is shown once; save it in your client's private credential configuration, not source control. Revoke a Grant when no longer needed.
+4. Use the gateway's Runs/approvals view for **Ask** decisions. Rediscovery creates another review; upstream changes do not publish themselves.
+
+Connections and Profile selections survive browser reload. Upstream bearer tokens and newly issued Grant tokens are never stored in browser persistent storage. Only owners administer the gateway; callers use the separate Grant. Generic OAuth sign-in remains paused pending its credential trust-model/target-server decision ([DET-1393](https://linear.app/detzel/issue/DET-1393)); there is no OAuth or unauthenticated fallback when a server requires it. Local `stdio` servers are not supported.
+
+Public no-auth examples are [Microsoft Learn](https://learn.microsoft.com/en-us/training/support/mcp-developer-reference) at `https://learn.microsoft.com/api/mcp` and [DeepWiki](https://docs.devin.ai/work-with-devin/deepwiki-mcp) at `https://mcp.deepwiki.com/mcp`. Their available Tools can change; always review the actual discovery report. The direct Node runtime can use public HTTPS destinations through the same broker. Hosted Workers retains its vetted socket/TLS transport and cannot connect to Cloudflare-hosted destinations; no native-fetch bypass is supplied. Local usability does not establish hosted upstream compatibility.
+
+This UI is local source until separately deployed. The production status site's older release is not automatically updated by a local commit or build.
+
+**Observed local gateway verification:** an owner connected Microsoft Learn and DeepWiki through `/gateway`, explicitly published one Tool from each, and discovered both through the same Grant-authenticated MCP endpoint alongside `runs.get`. DeepWiki returned the React documentation topics under Allow; Microsoft Learn returned Azure Functions documentation after owner approval under Ask. Disabling a server removed only its Tools from discovery, revoking the Grant returned `grant_revoked`, and reloading retained both server selections and completed Runs. These checks used disposable Node/SQLite data, not production; hosted upstream compatibility remains unverified.
+
 
 ### Agent validation workflow
 

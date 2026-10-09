@@ -19,3 +19,4 @@ export * from "./artifacts-db";
 export * from "./auth";
 export * from "./catalog-db";
 export * from "./control";
+export * from "./gateway-db";

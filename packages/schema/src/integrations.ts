@@ -481,6 +481,7 @@ export const Implementation = z.discriminatedUnion("kind", [
       endpoint: httpsUrl,
       protocolVersion: z.literal("2025-06-18"),
       toolName: nonempty,
+      connectionCredentialId: uuid.optional(),
     })
     .strict(),
 ]);
@@ -634,10 +635,15 @@ export const Source = z.discriminatedUnion("kind", [
       kind: z.literal("remote_mcp"),
       endpoint: httpsUrl,
       accountId: uuid.optional(),
+      connectionCredentialId: uuid.optional(),
       namespace: IntegrationSlug,
       nameMapping,
     })
-    .strict(),
+    .strict()
+    .refine(
+      (v) => !(v.accountId && v.connectionCredentialId),
+      "Choose verified Account or connection credential, not both",
+    ),
 ]);
 export type Source = z.infer<typeof Source>;
 export const RevisionSummary = z

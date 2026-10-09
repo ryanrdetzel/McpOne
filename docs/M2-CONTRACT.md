@@ -16,6 +16,8 @@ Sources: [M2 brief](https://linear.app/detzel/document/m2-execution-brief-tool-s
 
 M2 adds real TypeScript, HTTP/OpenAPI and remote MCP sources, named external Accounts, explicit compatibility/bindings, hosted OAuth/local custody, reviewed immutable publication and protected artifacts. It preserves the single authoritative Run/claim/recovery engine, direct SQLite, Worker/D1, stable Profile URL and all M1 safety/wire behavior. The owner API/CLI is sufficient; rich Profile/route UI, live playground, notifications, Guards and Activity search remain M3. Docker, full configurable retention/export/restore and ChatGPT/OMP launch certification remain M4. An omitted M3 UI is not permission to omit M2 authorization.
 
+**Approved gateway extension — [DET-1393](https://linear.app/detzel/issue/DET-1393), 2026-10-09:** a limited authenticated owner UI connects HTTPS no-auth/bearer MCP servers, reviews/publishes namespaced Tools into stable Profiles, issues/revokes Grants, and inspects/decides Runs. It does not establish full M3 or M2 acceptance. `connectionCredentialId` is an optional immutable generic Workspace transport-credential reference in remote sources and retained remote implementations, separate from verified Provider Accounts; source `accountId` and `connectionCredentialId` are mutually exclusive. It changes neither execution metadata nor the Account identity/scope verification contract. Generic OAuth remains an unresolved architecture gate.
+
 ### Source inconsistencies, explicitly retained
 
 1. D12 draft §§4/5 still call namespace selection pending; D12.20 and frozen M1 already choose `com.toolcontrolplane/execution`. Preserve that exact spelling.
@@ -89,7 +91,8 @@ type Implementation =
       response: { mediaType: string; schema?: JSONSchema;
         statuses?: Record<string, { mediaType: string; schema?: JSONSchema }> } }
   | { kind: "remote_mcp"; endpoint: string;
-      protocolVersion: "2025-06-18"; toolName: string };
+      protocolVersion: "2025-06-18"; toolName: string;
+      connectionCredentialId?: string };
 type BusinessMcpResult = {
   content: { type: "text"; text: string }[];
   structuredContent?: Record<string, JSONValue>;
@@ -144,6 +147,7 @@ type Source =
         securityAlternative?: number;
       }> }
   | { kind: "remote_mcp"; endpoint: string; accountId?: string;
+      connectionCredentialId?: string;
       namespace: string; nameMapping: Record<string, string> };
 type RevisionSummary = {
   revisionId: string; createdAt: string;
@@ -172,6 +176,10 @@ type ProfilePublication = {
 ```
 
 For TypeScript/HTTP sources, implementation kinds must match `Source.kind`. Remote `namespace` equals Integration slug; discovery `accountId` is owner-selected, compatible discovery credential only, never an implicit runtime Profile binding. OpenAPI `document` is JSON or safe YAML, not a URL fetched through unrestricted networking. YAML custom tags, aliases, merge keys, duplicate keys and non-JSON scalar values reject. `nameMapping`/`operationOptions` keys are stable `<UPPER_METHOD> <path>`; upstream `operationId`, if present, is retained. Remote mappings use upstream Tool name. All mapping destinations are full canonical names.
+
+The gateway extension's `connectionCredentialId` is owner-created, organization-scoped, encrypted at rest, and bound to one canonical HTTPS endpoint. It is not an Account alias or proof of verified identity/scopes. Owner publication explicitly shares the frozen credential reference with selected Workspace Profile Tools. Trusted discovery/invocation reloads custody and rechecks exact endpoint; invocation additionally checks the current enabled, published Profile/Integration selection after the durable dispatch fence. Refuse credential-bearing redirects, foreign organizations/endpoints, caller/guest credential selection, and credential/session contamination in reviewed metadata or decoded result keys. Tokens never enter source/review/Run plaintext or owner inventory responses. Existing Provider-backed `accountId` semantics remain unchanged.
+
+Additional same-origin owner API endpoints: `GET /gateway` returns persisted Profile/policy/Grant inventory and remote connection metadata without tokens; `POST /gateway/profiles` creates an empty real Profile from `{label}`; `POST /gateway/connections` creates an unpublished remote source from `{slug,displayName,endpoint,bearerToken?}`. Discovery and publication still use the immutable review/CAS routes below; no connection setup operation invokes a business Tool. Exact schemas are exported from `@scaffold/schema/gateway` and registered in OpenAPI. Generic OAuth, `stdio`, production rollout and hosted transport compatibility are not implied by this extension.
 
 | Method/path | Request | Success |
 | --- | --- | --- |

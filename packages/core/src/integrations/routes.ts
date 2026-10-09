@@ -1,6 +1,11 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import { ExecutionError } from "@scaffold/schema/execution";
 import {
+  GatewayCreateConnectionInput,
+  GatewayCreateProfileInput,
+  GatewayState,
+} from "@scaffold/schema/gateway";
+import {
   AccountList,
   AccountView,
   ArtifactRef,
@@ -28,12 +33,14 @@ import type { OrgRoleResult } from "../guard";
 import type { AccountsService } from "./accounts";
 import type { ArtifactService } from "./artifacts";
 import type { CatalogService } from "./catalog";
+import type { GatewayService } from "./gateway";
 import type { OAuthService } from "./oauth";
 export interface IntegrationOwnerServices {
   catalog: CatalogService;
   accounts: AccountsService;
   artifacts: ArtifactService;
   oauth: OAuthService;
+  gateway?: GatewayService;
 }
 type Owner = Extract<OrgRoleResult, { ok: true }>;
 const json = <T extends z.ZodType>(schema: T) => ({
@@ -89,7 +96,79 @@ export class IntegrationRoutes {
         );
       return { ...owner(value), sessionId: value.sessionId };
     };
+    const gateway = () => {
+      if (!services.gateway)
+        throw new ControlError(
+          "credential_unavailable",
+          "Gateway services are unavailable.",
+          503,
+        );
+      return services.gateway;
+    };
     this.api = api
+      .openapi(
+        createRoute({
+          method: "get",
+          path: "/gateway",
+          responses: {
+            200: {
+              description: "Workspace gateway configuration without secrets",
+              ...json(GatewayState),
+            },
+            ...errors,
+          },
+        }),
+        async (c) =>
+          c.json(await gateway().list(c.get("owner").organizationId), 200),
+      )
+      .openapi(
+        createRoute({
+          method: "post",
+          path: "/gateway/profiles",
+          request: {
+            body: { required: true, ...json(GatewayCreateProfileInput) },
+          },
+          responses: {
+            201: {
+              description: "Empty workspace Profile",
+              ...json(ProfileView),
+            },
+            ...errors,
+          },
+        }),
+        async (c) =>
+          c.json(
+            await gateway().createProfile(
+              owner(c.get("owner")),
+              c.req.valid("json"),
+            ),
+            201,
+          ),
+      )
+      .openapi(
+        createRoute({
+          method: "post",
+          path: "/gateway/connections",
+          request: {
+            body: { required: true, ...json(GatewayCreateConnectionInput) },
+          },
+          responses: {
+            201: {
+              description: "Unpublished endpoint-bound connection draft",
+              ...json(IntegrationDraft),
+            },
+            ...errors,
+          },
+        }),
+        async (c) =>
+          c.json(
+            await gateway().createConnection(
+              owner(c.get("owner")),
+              c.req.valid("json"),
+            ),
+            201,
+          ),
+      )
       .openapi(
         createRoute({
           method: "post",

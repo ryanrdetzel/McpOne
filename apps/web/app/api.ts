@@ -1,4 +1,4 @@
-import type { ApiType } from "@scaffold/core";
+import type { ApiType, ControlApiType } from "@scaffold/core";
 import { hc } from "hono/client";
 
 /**
@@ -7,3 +7,6 @@ import { hc } from "hono/client";
  * in production. VITE_API_URL exists for local frontend HMR on a second port.
  */
 export const client = hc<ApiType>(import.meta.env.VITE_API_URL ?? "");
+
+/** Owner routes are mounted separately from the public status API. */
+export const controlClient = hc<ControlApiType>("/api/control");

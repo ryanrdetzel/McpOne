@@ -64,6 +64,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </div>
         <p className="nav-label">WORKSPACE</p>
         <nav aria-label="Dashboard navigation">
+          <a href="/gateway" className="nav-item">
+            <Blocks size={18} />
+            MCP Gateway
+            <ArrowUpRight size={15} className="ml-auto" />
+          </a>
           <a href="#overview" className="nav-item active">
             <LayoutDashboard size={18} />
             Overview
@@ -111,6 +116,24 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               {refreshing ? "Checking…" : "Refresh status"}
             </Button>
           </div>
+          <Card className="mb-6 border-primary/30">
+            <CardContent className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  One endpoint. Your selected tools.
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Connect MCP servers, review tools, and create a scoped client
+                  token.
+                </p>
+              </div>
+              <Button asChild>
+                <a href="/gateway">
+                  Open MCP Gateway <ArrowUpRight />
+                </a>
+              </Button>
+            </CardContent>
+          </Card>
 
           {error && (
             <div role="alert" className="error-banner">
@@ -186,10 +209,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                   </span>
                   <h3>Connect once. Govern each execution.</h3>
                   <p>
-                    The fixture workflow supports labeled Grants,
-                    Allow/Ask/Block, owner approval, and Run retrieval without
-                    replaying effects. Use the documented CLI to configure and
-                    inspect your workspace.
+                    Connect external MCP servers in the owner gateway, review
+                    their tools, and publish selected tools to one stable
+                    endpoint. Allow/Ask/Block policies and durable Runs govern
+                    every client invocation.
                   </p>
                   <Button asChild variant="outline">
                     <a href="/openapi.json" target="_blank" rel="noreferrer">
@@ -202,12 +225,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 <div className="scope-note">
                   <BookOpen size={18} />
                   <p>
-                    <strong>Minimal owner interface</strong>
+                    <strong>Private owner gateway</strong>
                     <br />
-                    Setup and approvals use the CLI and authenticated control
-                    API. This public dashboard reports live infrastructure
-                    health, not private Profiles or Runs. Rich product screens
-                    come later.
+                    Manage connections, Profiles, client Grants and approvals in
+                    the authenticated gateway UI. This public dashboard exposes
+                    infrastructure health only.
                   </p>
                 </div>
               </CardContent>

@@ -29,7 +29,9 @@ import {
   type ResolvedSource,
   type SourceResolver,
 } from "./catalog";
+import { createConnectionCredentials } from "./connection-credentials";
 import { createDerivedMetadataCounter } from "./derived-budget";
+import { createGatewayService, type GatewayService } from "./gateway";
 import {
   invokeHttpTool,
   resolveHttpTools,
@@ -67,6 +69,7 @@ export type IntegrationServicesOptions = IntegrationServicesDependencies &
     | { sandbox: TypeScriptSandbox; engineFactory?: never }
   );
 export interface IntegrationServices extends IntegrationOwnerServices {
+  gateway: GatewayService;
   execution: ExecutionService;
   runtime: IntegrationRuntime;
 }
@@ -76,13 +79,16 @@ export function createIntegrationServices(
   options: IntegrationServicesOptions,
 ): IntegrationServices {
   const now = options.now ?? Date.now,
-    accounts = createAccountsService(options);
+    accounts = createAccountsService(options),
+    connectionCredentials = createConnectionCredentials(options);
   const remote = createRemoteMcpAdapter({
     transport: options.transport,
     discoveryTransport: (owner, accountId) =>
       accounts.createOwnerTransport(owner, accountId),
     describeAuthentication: (owner, accountId, endpoint) =>
       accounts.describeRemoteAuthentication(owner, accountId, endpoint),
+    connectionTransport: (owner, credentialId, endpoint) =>
+      connectionCredentials.ownerTransport(owner, credentialId, endpoint),
   });
   const sandbox =
     options.sandbox ??
@@ -327,6 +333,11 @@ export function createIntegrationServices(
         );
       const timer = setTimeout(() => controller.abort(), remaining),
         runContext = context(input);
+      const implementation = input.tool.definition.implementation;
+      const connectionCredentialId =
+        implementation.kind === "remote_mcp"
+          ? implementation.connectionCredentialId
+          : undefined;
       const broker = createBroker({
         transport: options.transport,
         accounts,
@@ -337,6 +348,22 @@ export function createIntegrationServices(
         permissions: input.tool.definition.permissions,
         signal: controller.signal,
         beforeRequest: input.beforeRequest,
+        ...(implementation.kind === "remote_mcp" && connectionCredentialId
+          ? {
+              connection: {
+                endpoint: implementation.endpoint,
+                authorize: (headers: Headers) =>
+                  connectionCredentials.authorize({
+                    orgId: input.orgId,
+                    profileId: input.profileId,
+                    integrationId: input.tool.integrationId,
+                    credentialId: connectionCredentialId,
+                    endpoint: implementation.endpoint,
+                    headers,
+                  }),
+              },
+            }
+          : {}),
         requestHeaders:
           input.tool.definition.implementation.kind === "http"
             ? input.tool.definition.implementation.parameters
@@ -433,5 +460,6 @@ export function createIntegrationServices(
     },
   };
   execution = createExecutionService({ ...options, runtime });
-  return { execution, runtime, catalog, accounts, oauth, artifacts };
+  const gateway = createGatewayService({ ...options, catalog });
+  return { execution, runtime, catalog, accounts, oauth, artifacts, gateway };
 }

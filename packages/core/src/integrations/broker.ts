@@ -73,6 +73,13 @@ export interface BrokerOptions {
   requestHeaders?: string[];
   responseHeaders?: string[];
   withBinaryAdmission?<T>(callback: () => Promise<T>): Promise<T>;
+  /** Trusted remote adapter only, fixed to the frozen endpoint; never a guest parameter. */
+  connection?: {
+    endpoint: string;
+    authorize(
+      headers: Headers,
+    ): Promise<{ headers: Headers; redact(text: string): string }>;
+  };
 }
 function redactDecodedJson(
   value: JSONValue,
@@ -400,6 +407,12 @@ export function createBroker(options: BrokerOptions): TrustedBroker {
           for (const key of keys)
             if (!permissions.some((p) => matches(p, key, method, url)))
               forbidden();
+          if (
+            options.connection &&
+            (url.href !== options.connection.endpoint ||
+              keys.some((key) => key !== null))
+          )
+            forbidden();
           let headers = safeHeaders(input.headers, input.trustedHeaders);
           if (input.mediaType) {
             if (
@@ -457,6 +470,13 @@ export function createBroker(options: BrokerOptions): TrustedBroker {
             headers = authorized.headers;
             redactors.push(authorized.redact);
           }
+          if (options.connection) {
+            await options.beforeRequest(attempt);
+            fenced = true;
+            const authorized = await options.connection.authorize(headers);
+            headers = authorized.headers;
+            redactors.push(authorized.redact);
+          }
           assertHeaderLimits(headers, framingBytes);
           if (!fenced) await options.beforeRequest(attempt);
           const attemptId = input.controlTraffic ? undefined : ++nextAttempt;
@@ -492,6 +512,7 @@ export function createBroker(options: BrokerOptions): TrustedBroker {
           }
           const location = response.headers.get("location");
           await response.body?.cancel();
+          if (options.connection) forbidden();
           if (
             !location ||
             redirects++ >= 3 ||

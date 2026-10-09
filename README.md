@@ -75,7 +75,7 @@ Connections and Profile selections survive browser reload. Upstream bearer token
 
 Public no-auth examples are [Microsoft Learn](https://learn.microsoft.com/en-us/training/support/mcp-developer-reference) at `https://learn.microsoft.com/api/mcp` and [DeepWiki](https://docs.devin.ai/work-with-devin/deepwiki-mcp) at `https://mcp.deepwiki.com/mcp`. Their available Tools can change; always review the actual discovery report. The direct Node runtime can use public HTTPS destinations through the same broker. Hosted Workers retains its vetted socket/TLS transport and cannot connect to Cloudflare-hosted destinations; no native-fetch bypass is supplied. Local usability does not establish hosted upstream compatibility.
 
-This UI is local source until separately deployed. The production status site's older release is not automatically updated by a local commit or build.
+The owner UI is deployed at [the production gateway](https://cfl-mcpone-3e4b5c9dc0.ryandetzel3409.workers.dev/gateway) in release `gateway-ui-1`. Later local commits/builds do not automatically update production; follow the lifecycle deployment procedure below.
 
 **Observed local gateway verification:** an owner connected Microsoft Learn and DeepWiki through `/gateway`, explicitly published one Tool from each, and discovered both through the same Grant-authenticated MCP endpoint alongside `runs.get`. DeepWiki returned the React documentation topics under Allow; Microsoft Learn returned Azure Functions documentation after owner approval under Ask. Disabling a server removed only its Tools from discovery, revoking the Grant returned `grant_revoked`, and reloading retained both server selections and completed Runs. These checks used disposable Node/SQLite data, not production; hosted upstream compatibility remains unverified.
 
@@ -137,6 +137,20 @@ Use the authenticated remote lifecycle MCP at `https://cfl-lifecycle-controller-
 Reuse the same artifact and request key when recovering a lost submission response. Changed code, SQL, or bindings require a new upload/key. Failure can leave code live; inspect operation recovery guidance rather than assuming rollback or creating a replacement app.
 
 Previews use separate empty D1 databases and separate secrets, never production rows or a production-secret fallback. Before uploading a preview, configure `previewVars.BETTER_AUTH_URL` and `previewVars.TRUSTED_ORIGINS` for its exact served origin; the default preview config deliberately requires those values and will not pass readiness without them. Use the actual checked-out Git ref and verify its auth/session boundary before browser/auth smoke checks.
+
+### Verified gateway deployment — 2026-10-09
+
+- **Gateway:** [McpOne MCP Gateway](https://cfl-mcpone-3e4b5c9dc0.ryandetzel3409.workers.dev/gateway)
+- **Source commit:** `74315f34d7743deabf87b9915bd9bbca8e0d2f3e`
+- **Release:** `gateway-ui-1`
+- **Application / D1:** retained `375fd22e-ecf2-4d33-b9cb-44b85f5153da` / `95a44e24-b138-4960-bc5c-a5e8cc11e607`
+- **Final operation:** `26a3e39f-c71c-4cc6-97e3-b82f2d471b93` — `ready`, `complete`
+- **Artifact:** `2f98200f-acdd-4f74-b62b-27ca64e5e59c`; 8,415,747 serialized bytes; digest `bbe8ca2d73e7f14f3d029621ddc40f5f3c8692dcc7e7ded138e0a596869cda67`
+- **Deployment:** `8239e281-1ddf-46c0-9fa3-a65d5903154a`
+
+The existing lifecycle applied the ordered migrations and added `CONTROL_SCHEDULER` / `ControlScheduler` using the expected-empty-layout, add-only migration; it retained the existing Worker and D1 identities. `get_app` confirmed provider existence and live health. Uncached `/healthz` and `/api/dashboard` returned 200, release `gateway-ui-1`, the matching operation marker, and `database: true`. Anonymous gateway/organization requests returned 401, session lookup returned no session, and foreign-origin auth preflight provided no allowed-origin header.
+
+The live dashboard gateway link, sign-in/create-account toggle, enabled sign-in controls after session loading, and rendered gateway were inspected in Chromium with no page errors. `pnpm check`, `pnpm cf:check`, and 14/14 smoke checks passed before publication; mutating checks used disposable local SQLite only. No production accounts, connections, Grants, or Runs were created for verification. Hosted upstream interoperability remains unverified; generic OAuth and strict native TypeScript execution remain unavailable. Approval and evidence: [DET-1393](https://linear.app/detzel/issue/DET-1393).
 
 ### Verified deployment — 2026-10-08
 
